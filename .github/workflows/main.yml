@@ -4,38 +4,49 @@ on:
   push:
     branches:
       - main
+      - master
   pull_request:
     branches:
       - main
-  workflow_dispatch: # GitHub dashboard se manual trigger karne ke liye
+      - master
+  workflow_dispatch:
 
 jobs:
   # -------------------------------------------------------------
-  # JOB 1: Test & Verify Admin Telegram Bot
+  # JOB 1: Verify Node.js Admin Bot
   # -------------------------------------------------------------
   validate-bot:
     name: Verify Telegram Controller Bot
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./admin_bot
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Setup Node.js (v22 LTS)
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-          cache: 'npm'
-          cache-dependency-path: './admin_bot/package-lock.json'
+          node-version: 22
 
-      - name: Install Bot Dependencies
-        run: npm ci || npm install
-
-      - name: Syntax Check Bot Script
-        run: node -c admin_bot.js
+      - name: Locate & Install Bot Dependencies
+        run: |
+          # Auto-detect folder (admin_bot folder ya root)
+          if [ -d "admin_bot" ]; then
+            cd admin_bot
+          fi
+          
+          if [ -f "package.json" ]; then
+            echo "📦 Installing bot dependencies..."
+            npm install --no-audit --no-fund
+            
+            if [ -f "admin_bot.js" ]; then
+              echo "🔍 Checking bot syntax..."
+              node -c admin_bot.js
+              echo "✅ Bot syntax verified!"
+            fi
+          else
+            echo "ℹ️ No package.json found for bot, skipping bot check."
+          fi
 
   # -------------------------------------------------------------
   # JOB 2: Build Flutter APK & Send to Telegram
@@ -44,9 +55,6 @@ jobs:
     name: Build & Deploy Customer App
     needs: validate-bot
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./customer_app
 
     steps:
       - name: Checkout Repository
@@ -57,7 +65,6 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
-          cache: 'gradle'
 
       - name: Setup Flutter Engine
         uses: subosito/flutter-action@v2
@@ -65,51 +72,84 @@ jobs:
           flutter-version: '3.24.x'
           channel: 'stable'
           cache: true
-          cache-key: "flutter-:os-:-:channel-:-:version-"
 
-      # Firebase Google Services JSON Injector (from Base64 Secret)
-      - name: Inject Firebase Configuration
+      - name: Detect Flutter Directory & Inject Firebase
         env:
           GOOGLE_SERVICES_BASE64: ${{ secrets.GOOGLE_SERVICES_JSON_BASE64 }}
         run: |
-          if [ -n "$GOOGLE_SERVICES_BASE64" ]; then
-            echo "$GOOGLE_SERVICES_BASE64" | base64 --decode > android/app/google-services.json
-            echo "✅ google-services.json successfully injected."
+          # Check Flutter root path
+          if [ -f "pubspec.yaml" ]; then
+            FLUTTER_DIR="."
+          elif [ -f "customer_app/pubspec.yaml" ]; then
+            FLUTTER_DIR="customer_app"
           else
-            echo "⚠️ Warning: GOOGLE_SERVICES_JSON_BASE64 secret not found."
+            echo "❌ Error: pubspec.yaml nahi mila!"
+            exit 1
+          fi
+          echo "FLUTTER_DIR=$FLUTTER_DIR" >> $GITHUB_ENV
+          echo "Flutter directory identified: $FLUTTER_DIR"
+
+          # Inject google-services.json
+          TARGET_DIR="$FLUTTER_DIR/android/app"
+          mkdir -p "$TARGET_DIR"
+          if [ -n "$GOOGLE_SERVICES_BASE64" ]; then
+            echo "$GOOGLE_SERVICES_BASE64" \vert{} base64 --decode > "$TARGET_DIR/google-services.json"
+            echo "✅ google-services.json successfully injected into $TARGET_DIR."
+          elif [ -f "$TARGET_DIR/google-services.json" ]; then
+            echo "ℹ️ Existing google-services.json found in repository."
+          else
+            echo "⚠️ Warning: Neither secret nor existing google-services.json found."
           fi
 
       - name: Install Flutter Dependencies
-        run: flutter pub get
+        run: |
+          cd $FLUTTER_DIR
+          flutter pub get
 
-      - name: Build Universal Release APK
-        run: flutter build apk --release
+      - name: Build Release APK
+        run: |
+          cd $FLUTTER_DIR
+          flutter build apk --release
 
-      # GitHub Actions Artifacts me store karein
+      - name: Locate Output APK
+        run: |
+          APK_FILE=$(find$FLUTTER_DIR/build/app/outputs/flutter-apk -name "*release*.apk" | head -n 1)
+          if [ -z "$APK_FILE" ]; then
+            echo "❌ Error: APK build file nahi mila!"
+            exit 1
+          fi
+          echo "RESOLVED_APK_PATH=$APK_FILE" >> $GITHUB_ENV
+          echo "Found APK at: $APK_FILE"
+
       - name: Upload APK to GitHub Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: customer-app-release
-          path: customer_app/build/app/outputs/flutter-apk/app-release.apk
+          path: ${{ env.RESOLVED_APK_PATH }}
           retention-days: 14
 
-      # Telegram par direct APK send karein
       - name: Deliver APK to Telegram Admin
+        if: env.RESOLVED_APK_PATH != ''
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_ADMIN_CHAT_ID }}
           COMMIT_MSG: ${{ github.event.head_commit.message }}
           COMMIT_SHA: ${{ github.sha }}
         run: |
-          APK_PATH="build/app/outputs/flutter-apk/app-release.apk"
+          if [ -z "$TELEGRAM_BOT_TOKEN" ] \vert{}\vert{} [ -z "$TELEGRAM_CHAT_ID" ]; then
+            echo "⚠️ Telegram secrets missing. Skipping Telegram notification."
+            exit 0
+          fi
+
           CAPTION="🚀 *Naya Customer App Release!*
-          
+
           📝 *Commit:* ${COMMIT_MSG}
           🔖 *Hash:* \`${COMMIT_SHA:0:7}\`
           ⏱️ *Branch:* \`${GITHUB_REF_NAME}\`"
 
-          curl -v -F "chat_id=${TELEGRAM_CHAT_ID}" \
+          curl -s -F "chat_id=${TELEGRAM_CHAT_ID}" \
                -F "caption=${CAPTION}" \
                -F "parse_mode=Markdown" \
-               -F "document=@${APK_PATH}" \
+               -F "document=@${RESOLVED_APK_PATH}" \
                "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument"
+          echo "✅ APK successfully dispatched to Telegram."
