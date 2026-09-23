@@ -1,16 +1,14 @@
 {
   "project_info": {
     "project_number": "123456789000",
-    "project_id": "meesho-tshirt-store",
-    "storage_bucket": "meesho-tshirt-store.appspot.com"
+    "project_id": "meesho-customer-store",
+    "storage_bucket": "meesho-customer-store.appspot.com"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:123456789000:android:customerappdummy",
-        "android_client_info": {
-          "package_name": "com.meesho.tshirt.customer"
-        }
+        "mobilesdk_app_id": "1:123456789000:android:customerapp",
+        "android_client_info": { "package_name": "com.meesho.tshirt.customer_app" }
       },
       "api_key": [{ "current_key": "AIzaSyDummyKeyReplaceWithActualFirebaseKey" }]
     }

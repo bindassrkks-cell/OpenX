@@ -1,5 +1,5 @@
 name: admin_app
-description: "T-Shirt Store Admin & Telegram Poller"
+description: "Store Admin & Telegram Poller"
 publish_to: 'none'
 version: 1.0.0+1
 

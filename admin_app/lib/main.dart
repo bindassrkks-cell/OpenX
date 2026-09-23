@@ -4,220 +4,140 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 void main() {
-  runApp(const AdminPanelApp());
+  runApp(const AdminApp());
 }
 
-class AdminPanelApp extends StatelessWidget {
-  const AdminPanelApp({super.key});
+class AdminApp extends StatelessWidget {
+  const AdminApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Store Admin Panel',
+      title: 'Admin Control Center',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         primaryColor: Colors.black,
         scaffoldBackgroundColor: const Color(0xFFF4F6F9),
         useMaterial3: true,
       ),
-      home: const AdminDashboardScreen(),
+      home: const AdminHome(),
     );
   }
 }
 
-class AdminDashboardScreen extends StatefulWidget {
-  const AdminDashboardScreen({super.key});
+class AdminHome extends StatefulWidget {
+  const AdminHome({super.key});
 
   @override
-  State<AdminDashboardScreen> createState() => _AdminDashboardScreenState();
+  State<AdminHome> createState() => _AdminHomeState();
 }
 
-class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
+class _AdminHomeState extends State<AdminHome> {
   final String botToken = "7663258345:AAFWanmBg6FD_DQTz2q9tkvHX-8M9vAWkUA";
-  bool isPolling = false;
+  Timer? timer;
   int lastUpdateId = 0;
-  Timer? pollTimer;
-  List<String> botLogs = [];
-
-  final List<Map<String, dynamic>> orders = [
-    {
-      "id": "ORD_101",
-      "customer": "Mohammad Nisarul",
-      "item": "Anime Oversized Tee (L)",
-      "amount": 499,
-      "status": "PAYMENT_PENDING",
-      "utr": "428901239841",
-    },
-    {
-      "id": "ORD_102",
-      "customer": "Rahul Sharma",
-      "item": "Acid Wash Black Tee (XL)",
-      "amount": 549,
-      "status": "CONFIRMED",
-      "utr": "981273981273",
-    }
-  ];
+  List<String> logs = [];
 
   @override
   void initState() {
     super.initState();
-    startTelegramPolling();
+    startPolling();
   }
 
   @override
   void dispose() {
-    pollTimer?.cancel();
+    timer?.cancel();
     super.dispose();
   }
 
-  // In-app Telegram Bot Polling Engine
-  void startTelegramPolling() {
-    setState(() => isPolling = true);
-    pollTimer = Timer.periodic(const Duration(seconds: 4), (timer) async {
+  void startPolling() {
+    timer = Timer.periodic(const Duration(seconds: 4), (t) async {
       try {
-        final url = Uri.parse("https://api.telegram.org/bot$botToken/getUpdates?offset=${lastUpdateId + 1}&timeout=3");
-        final response = await http.get(url);
-
-        if (response.statusCode == 200) {
-          final data = jsonDecode(response.body);
+        final url = Uri.parse("https://api.telegram.org/bot$botToken/getUpdates?offset=${lastUpdateId + 1}&timeout=2");
+        final res = await http.get(url);
+        if (res.statusCode == 200) {
+          final data = jsonDecode(res.body);
           final updates = data['result'] as List;
-
-          for (var update in updates) {
-            lastUpdateId = update['update_id'];
-            if (update.containsKey('message')) {
-              final chatId = update['message']['chat']['id'];
-              final text = update['message']['text'] ?? "";
-
-              _handleBotMessage(chatId, text);
+          for (var u in updates) {
+            lastUpdateId = u['update_id'];
+            if (u.containsKey('message')) {
+              final chatId = u['message']['chat']['id'];
+              final text = u['message']['text'] ?? "";
+              _respond(chatId, text);
             }
           }
         }
-      } catch (e) {
-        // Connection silently resumes next cycle
-      }
+      } catch (_) {}
     });
   }
 
-  void _handleBotMessage(dynamic chatId, String text) async {
-    String reply = "Welcome Boss! Admin Panel is active.\nType /orders to see pending orders.";
-    if (text == "/orders") {
-      reply = "📦 *Pending Orders:* \nORD_101 - ₹499 (Mohammad Nisarul) UTR: 428901239841";
-    }
-
-    final sendUrl = Uri.parse("https://api.telegram.org/bot$botToken/sendMessage");
-    await http.post(sendUrl, body: {
-      "chat_id": chatId.toString(),
-      "text": reply,
-      "parse_mode": "Markdown",
-    });
-
-    setState(() {
-      botLogs.insert(0, "Bot query: '$text' from chat: $chatId");
-    });
+  void _respond(dynamic chatId, String text) async {
+    String reply = "Store Admin is Active. Type /orders to see list.";
+    if (text == "/orders") reply = "Orders: #ORD_101 (Rs. 499) - Tokyo Anime Tee";
+    final url = Uri.parse("https://api.telegram.org/bot$botToken/sendMessage");
+    await http.post(url, body: {"chat_id": chatId.toString(), "text": reply});
+    setState(() => logs.insert(0, "Chat: $chatId sent '$text'"));
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Store Control & Bot Manager", style: TextStyle(color: Colors.white)),
+        title: const Text("Admin & Telegram Poller", style: TextStyle(color: Colors.white, fontSize: 16)),
         backgroundColor: Colors.black,
         actions: [
           Container(
-            margin: const EdgeInsets.only(right: 15),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-            decoration: BoxDecoration(color: Colors.green.shade800, borderRadius: BorderRadius.circular(12)),
-            child: const Text("Bot Polling: Active", style: TextStyle(color: Colors.white, fontSize: 11)),
+            margin: const EdgeInsets.only(right: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            decoration: BoxDecoration(color: Colors.green, borderRadius: BorderRadius.circular(12)),
+            child: const Text("Polling Active", style: TextStyle(color: Colors.white, fontSize: 11)),
           )
         ],
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Row(
-            children: [
-              _metricCard("Total Revenue", "₹14,890", Colors.green),
-              const SizedBox(width: 12),
-              _metricCard("Pending Orders", "1 New", Colors.orange),
-            ],
-          ),
-          const SizedBox(height: 20),
-          const Text("Recent Orders & Payments", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 10),
-          ...orders.map((o) => Card(
+          Card(
             color: Colors.white,
-            margin: const EdgeInsets.only(bottom: 12),
             child: Padding(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text("Order #${o['id']}", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                      Text("₹${o['amount']}", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.green, fontSize: 16)),
-                    ],
-                  ),
-                  Text("Customer: ${o['customer']}"),
-                  Text("Product: ${o['item']}"),
-                  Text("UTR: ${o['utr']}", style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.blueGrey)),
-                  const Divider(height: 20),
+                  const Text("Order #ORD_101", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  const Text("Item: Tokyo Anime Tee (L) - Rs. 499"),
+                  const Text("UTR: 498129038102", style: TextStyle(color: Colors.blueGrey, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 12),
                   Row(
                     children: [
                       ElevatedButton(
                         style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-                        onPressed: () {
-                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Order #${o['id']} Approved!")));
-                        },
-                        child: const Text("Approve Payment"),
+                        onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Order Approved!"))),
+                        child: const Text("Approve"),
                       ),
                       const SizedBox(width: 8),
-                      OutlinedButton.icon(
-                        icon: const Icon(Icons.local_shipping, size: 16),
-                        label: const Text("Shiprocket Dispatch"),
-                        onPressed: () {
-                          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Courier Pickup Scheduled!")));
-                        },
-                      )
+                      OutlinedButton(
+                        onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Shiprocket Courier Dispatched!"))),
+                        child: const Text("Dispatch"),
+                      ),
                     ],
                   )
                 ],
               ),
             ),
-          )),
+          ),
           const SizedBox(height: 20),
-          const Text("Telegram Bot Live Polling Logs", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          const Text("Telegram Bot Live Logs", style: TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           Container(
-            height: 140,
+            height: 160,
             padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(8)),
-            child: botLogs.isEmpty
-                ? const Center(child: Text("Listening for Telegram commands (/orders, /start)...", style: TextStyle(color: Colors.white54, fontSize: 12)))
-                : ListView.builder(
-                    itemCount: botLogs.length,
-                    itemBuilder: (ctx, i) => Text(botLogs[i], style: const TextStyle(color: Colors.greenAccent, fontSize: 12)),
-                  ),
+            decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(8)),
+            child: logs.isEmpty
+                ? const Center(child: Text("Listening for Telegram commands...", style: TextStyle(color: Colors.white60, fontSize: 12)))
+                : ListView.builder(itemCount: logs.length, itemBuilder: (c, i) => Text(logs[i], style: const TextStyle(color: Colors.greenAccent, fontSize: 12))),
           )
         ],
-      ),
-    );
-  }
-
-  Widget _metricCard(String label, String value, Color color) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label, style: const TextStyle(color: Colors.grey, fontSize: 12)),
-            const SizedBox(height: 6),
-            Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: color)),
-          ],
-        ),
       ),
     );
   }
