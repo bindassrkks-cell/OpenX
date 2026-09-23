@@ -1,224 +1,357 @@
-import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:http/http.dart' as http;
+
+// FIREBASE REALTIME DB CONFIG
+const String kFirebaseDbUrl = "https://meesho-tshirt-store-default-rtdb.firebaseio.com";
+const String kTelegramBotToken = "7663258345:AAFWanmBg6FD_DQTz2q9tkvHX-8M9vAWkUA";
 
 void main() {
-  runApp(const MeeshoCustomerApp());
+  runApp(const MeeshoDarkCustomerApp());
 }
 
-class MeeshoCustomerApp extends StatelessWidget {
-  const MeeshoCustomerApp({super.key});
+class MeeshoDarkCustomerApp extends StatelessWidget {
+  const MeeshoDarkCustomerApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Meesho T-Shirt Store',
+      title: 'Meesho T-Shirt Dark',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        primaryColor: const Color(0xFF9F2089),
-        scaffoldBackgroundColor: const Color(0xFFF7F7F7),
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF9F2089)),
+      theme: ThemeData.dark().copyWith(
+        scaffoldBackgroundColor: const Color(0xFF0F0F12),
+        cardColor: const Color(0xFF1C1C22),
+        primaryColor: const Color(0xFFFF2E93),
+        colorScheme: const ColorScheme.dark(
+          primary: Color(0xFFFF2E93),
+          secondary: Color(0xFF00E676),
+          surface: Color(0xFF1C1C22),
+        ),
         useMaterial3: true,
       ),
-      home: const HomeScreen(),
+      home: const CustomerRootScreen(),
     );
   }
 }
 
-class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+class CustomerRootScreen extends StatefulWidget {
+  const CustomerRootScreen({super.key});
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  State<CustomerRootScreen> createState() => _CustomerRootScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
-  int _navIndex = 0;
-
-  final List<Map<String, dynamic>> products = const [
-    {
-      "id": "TSH01",
-      "title": "Tokyo Anime Oversized Streetwear Graphic Tee",
-      "price": 499,
-      "original_price": 999,
-      "discount": "50% OFF",
-      "rating": "4.3 ★",
-      "image": "https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=500"
-    },
-    {
-      "id": "TSH02",
-      "title": "Vintage Acid Wash 240 GSM Pure Cotton Tee",
-      "price": 399,
-      "original_price": 899,
-      "discount": "55% OFF",
-      "rating": "4.5 ★",
-      "image": "https://images.unsplash.com/photo-1583743814966-8936f5b7be1a?w=500"
-    },
-    {
-      "id": "TSH03",
-      "title": "Minimalist Japanese Aesthetic Black Tee",
-      "price": 449,
-      "original_price": 899,
-      "discount": "50% OFF",
-      "rating": "4.2 ★",
-      "image": "https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?w=500"
-    },
-    {
-      "id": "TSH04",
-      "title": "Drop Shoulder Retro Street Typography Tee",
-      "price": 549,
-      "original_price": 1099,
-      "discount": "50% OFF",
-      "rating": "4.4 ★",
-      "image": "https://images.unsplash.com/photo-1562157873-818bc0726f68?w=500"
-    }
+class _CustomerRootScreenState extends State<CustomerRootScreen> {
+  int _selectedIndex = 0;
+  final List<Widget> _tabs = [
+    const DarkHomeScreen(),
+    const CategoriesScreen(),
+    const MyOrdersScreen(),
+    const AccountProfileScreen(),
   ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0.5,
-        title: Container(
-          height: 40,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          decoration: BoxDecoration(
-            color: Colors.grey.shade100,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.grey.shade300),
-          ),
-          child: const Row(
-            children: [
-              Icon(Icons.search, color: Colors.grey, size: 20),
-              SizedBox(width: 8),
-              Text("Search T-Shirts, Anime, Sizes...", style: TextStyle(color: Colors.grey, fontSize: 13)),
-            ],
-          ),
-        ),
-      ),
-      body: ListView(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-            color: const Color(0xFFFBE7F5),
-            child: const Row(
-              children: [
-                Icon(Icons.local_shipping_outlined, color: Color(0xFF9F2089), size: 18),
-                SizedBox(width: 8),
-                Text("Free Delivery + Cash On Delivery Available", style: TextStyle(color: Color(0xFF9F2089), fontWeight: FontWeight.bold, fontSize: 12)),
-              ],
-            ),
-          ),
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            padding: const EdgeInsets.all(8),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              childAspectRatio: 0.60,
-              crossAxisSpacing: 8,
-              mainAxisSpacing: 8,
-            ),
-            itemCount: products.length,
-            itemBuilder: (ctx, i) {
-              final p = products[i];
-              return GestureDetector(
-                onTap: () => Navigator.push(ctx, MaterialPageRoute(builder: (_) => ProductDetailScreen(product: p))),
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.grey.shade200),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: ClipRRect(
-                          borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
-                          child: Image.network(p['image'], width: double.infinity, fit: BoxFit.cover),
-                        ),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(p['title'], maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12)),
-                            const SizedBox(height: 4),
-                            Row(
-                              children: [
-                                Text("₹${p['price']}", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                                const SizedBox(width: 4),
-                                Text("₹${p['original_price']}", style: const TextStyle(fontSize: 11, decoration: TextDecoration.lineThrough, color: Colors.grey)),
-                                const SizedBox(width: 4),
-                                Text(p['discount'], style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.green)),
-                              ],
-                            ),
-                            const SizedBox(height: 4),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(color: Colors.green.shade700, borderRadius: BorderRadius.circular(10)),
-                              child: Text(p['rating'], style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-                            ),
-                            const SizedBox(height: 2),
-                            const Text("Free Delivery", style: TextStyle(fontSize: 10, color: Colors.grey)),
-                          ],
-                        ),
-                      )
-                    ],
-                  ),
-                ),
-              );
-            },
-          )
-        ],
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _navIndex,
-        onTap: (i) => setState(() => _navIndex = i),
-        type: BottomNavigationBarType.fixed,
-        selectedItemColor: const Color(0xFF9F2089),
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home), label: "Home"),
-          BottomNavigationBarItem(icon: Icon(Icons.grid_view), label: "Categories"),
-          BottomNavigationBarItem(icon: Icon(Icons.shopping_bag_outlined), label: "Orders"),
-          BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: "Account"),
+      body: _tabs[_selectedIndex],
+      bottomNavigationBar: NavigationBar(
+        backgroundColor: const Color(0xFF14141A),
+        indicatorColor: const Color(0xFFFF2E93).withOpacity(0.2),
+        selectedIndex: _selectedIndex,
+        onDestinationSelected: (i) => setState(() => _selectedIndex = i),
+        destinations: const [
+          NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home, color: Color(0xFFFF2E93)), label: "Home"),
+          NavigationDestination(icon: Icon(Icons.grid_view_outlined), selectedIcon: Icon(Icons.grid_view, color: Color(0xFFFF2E93)), label: "Categories"),
+          NavigationDestination(icon: Icon(Icons.receipt_long_outlined), selectedIcon: Icon(Icons.receipt_long, color: Color(0xFFFF2E93)), label: "Orders"),
+          NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person, color: Color(0xFFFF2E93)), label: "Account"),
         ],
       ),
     );
   }
 }
 
-class ProductDetailScreen extends StatefulWidget {
-  final Map<String, dynamic> product;
-  const ProductDetailScreen({super.key, required this.product});
-
+// 1. HOME SCREEN
+class DarkHomeScreen extends StatefulWidget {
+  const DarkHomeScreen({super.key});
   @override
-  State<ProductDetailScreen> createState() => _ProductDetailScreenState();
+  State<DarkHomeScreen> createState() => _DarkHomeScreenState();
 }
 
-class _ProductDetailScreenState extends State<ProductDetailScreen> {
+class _DarkHomeScreenState extends State<DarkHomeScreen> {
+  String selectedCategory = "All";
+  String searchQuery = "";
+
+  final List<Map<String, dynamic>> staticProducts = const [
+    {
+      "id": "TSH01",
+      "title": "Tokyo Anime Oversized Streetwear Tee",
+      "price": 499,
+      "original_price": 999,
+      "discount": "50% OFF",
+      "rating": "4.5 ★",
+      "category": "Anime",
+      "image": "https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=500"
+    },
+    {
+      "id": "TSH02",
+      "title": "Vintage Acid Wash Heavy 240 GSM Tee",
+      "price": 399,
+      "original_price": 899,
+      "discount": "55% OFF",
+      "rating": "4.7 ★",
+      "category": "Acid Wash",
+      "image": "https://images.unsplash.com/photo-1583743814966-8936f5b7be1a?w=500"
+    },
+    {
+      "id": "TSH03",
+      "title": "Minimalist Kanji Drop Shoulder Black Tee",
+      "price": 449,
+      "original_price": 899,
+      "discount": "50% OFF",
+      "rating": "4.3 ★",
+      "category": "Anime",
+      "image": "https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?w=500"
+    },
+    {
+      "id": "TSH04",
+      "title": "Retro Street Typography Oversized Tee",
+      "price": 549,
+      "original_price": 1099,
+      "discount": "50% OFF",
+      "rating": "4.6 ★",
+      "category": "Oversized",
+      "image": "https://images.unsplash.com/photo-1562157873-818bc0726f68?w=500"
+    }
+  ];
+
+  List<Map<String, dynamic>> firebaseProducts = [];
+  bool isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    fetchFirebaseProducts();
+  }
+
+  Future<void> fetchFirebaseProducts() async {
+    try {
+      final res = await http.get(Uri.parse("$kFirebaseDbUrl/products.json"));
+      if (res.statusCode == 200 && res.body != "null") {
+        final Map<String, dynamic> data = jsonDecode(res.body);
+        final List<Map<String, dynamic>> loaded = [];
+        data.forEach((k, v) {
+          loaded.add({...Map<String, dynamic>.from(v), "id": k});
+        });
+        setState(() => firebaseProducts = loaded);
+      }
+    } catch (_) {}
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final allProducts = [...firebaseProducts, ...staticProducts];
+    final filtered = allProducts.where((p) {
+      final matchCat = selectedCategory == "All" || p['category'] == selectedCategory;
+      final matchSearch = p['title'].toString().toLowerCase().contains(searchQuery.toLowerCase());
+      return matchCat && matchSearch;
+    }).toList();
+
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF14141A),
+        elevation: 0,
+        title: Container(
+          height: 42,
+          decoration: BoxDecoration(
+            color: const Color(0xFF22222B),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: TextField(
+            onChanged: (val) => setState(() => searchQuery = val),
+            style: const TextStyle(color: Colors.white, fontSize: 13),
+            decoration: const InputDecoration(
+              hintText: "Search Anime, Oversized T-Shirts...",
+              hintStyle: TextStyle(color: Colors.white54, fontSize: 13),
+              prefixIcon: Icon(Icons.search, color: Color(0xFFFF2E93), size: 20),
+              border: InputBorder.none,
+              contentPadding: EdgeInsets.symmetric(vertical: 10),
+            ),
+          ),
+        ),
+      ),
+      body: RefreshIndicator(
+        onRefresh: fetchFirebaseProducts,
+        child: ListView(
+          children: [
+            // Promo Strip
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+              color: const Color(0xFF281324),
+              child: const Row(
+                children: [
+                  Icon(Icons.local_shipping, color: Color(0xFFFF2E93), size: 18),
+                  SizedBox(width: 8),
+                  Text("⚡ FREE Fast Delivery + Cash On Delivery Available", style: TextStyle(color: Color(0xFFFF2E93), fontWeight: FontWeight.bold, fontSize: 11)),
+                ],
+              ),
+            ),
+
+            // Categories Horizontal Chips
+            Container(
+              height: 48,
+              margin: const EdgeInsets.symmetric(vertical: 8),
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                children: ["All", "Anime", "Oversized", "Acid Wash", "Plain"].map((cat) {
+                  final isSel = selectedCategory == cat;
+                  return GestureDetector(
+                    onTap: () => setState(() => selectedCategory = cat),
+                    child: Container(
+                      margin: const EdgeInsets.only(right: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: isSel ? const Color(0xFFFF2E93) : const Color(0xFF1C1C22),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: isSel ? const Color(0xFFFF2E93) : const Color(0xFF2E2E38)),
+                      ),
+                      child: Center(
+                        child: Text(cat, style: TextStyle(color: isSel ? Colors.white : Colors.white70, fontWeight: FontWeight.bold, fontSize: 12)),
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+
+            // Product Grid (Meesho Style)
+            GridView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(10),
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 2,
+                childAspectRatio: 0.58,
+                crossAxisSpacing: 10,
+                mainAxisSpacing: 10,
+              ),
+              itemCount: filtered.length,
+              itemBuilder: (ctx, i) {
+                final p = filtered[i];
+                return GestureDetector(
+                  onTap: () => Navigator.push(ctx, MaterialPageRoute(builder: (_) => DarkProductDetailScreen(product: p))),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF181820),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: const Color(0xFF272733)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: ClipRRect(
+                            borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
+                            child: Image.network(
+                              p['image'] ?? "",
+                              width: double.infinity,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => Container(
+                                color: const Color(0xFF252530),
+                                child: const Center(
+                                  child: Icon(Icons.checkroom_rounded, size: 50, color: Color(0xFFFF2E93)),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.all(10.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(p['title'] ?? "", maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white)),
+                              const SizedBox(height: 6),
+                              Row(
+                                children: [
+                                  Text("₹${p['price']}", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                                  const SizedBox(width: 5),
+                                  Text("₹${p['original_price'] ?? 899}", style: const TextStyle(fontSize: 11, decoration: TextDecoration.lineThrough, color: Colors.white38)),
+                                  const SizedBox(width: 4),
+                                  Text(p['discount'] ?? "50% OFF", style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF00E676))),
+                                ],
+                              ),
+                              const SizedBox(height: 6),
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(color: const Color(0xFF00C853), borderRadius: BorderRadius.circular(6)),
+                                    child: Text(p['rating'] ?? "4.5 ★", style: const TextStyle(color: Colors.black, fontSize: 10, fontWeight: FontWeight.bold)),
+                                  ),
+                                  const Text("Free Delivery", style: TextStyle(fontSize: 10, color: Colors.white54)),
+                                ],
+                              )
+                            ],
+                          ),
+                        )
+                      ],
+                    ),
+                  ),
+                );
+              },
+            )
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// 2. PRODUCT DETAILS
+class DarkProductDetailScreen extends StatefulWidget {
+  final Map<String, dynamic> product;
+  const DarkProductDetailScreen({super.key, required this.product});
+
+  @override
+  State<DarkProductDetailScreen> createState() => _DarkProductDetailScreenState();
+}
+
+class _DarkProductDetailScreenState extends State<DarkProductDetailScreen> {
   String selectedSize = "M";
 
   @override
   Widget build(BuildContext context) {
     final p = widget.product;
     return Scaffold(
-      appBar: AppBar(title: Text(p['title'], style: const TextStyle(fontSize: 15))),
+      appBar: AppBar(backgroundColor: const Color(0xFF14141A), title: Text(p['title'], style: const TextStyle(fontSize: 15))),
       body: ListView(
         children: [
-          Image.network(p['image'], height: 350, width: double.infinity, fit: BoxFit.cover),
+          Image.network(
+            p['image'] ?? "",
+            height: 380,
+            width: double.infinity,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => Container(height: 300, color: const Color(0xFF22222E), child: const Icon(Icons.checkroom, size: 80, color: Color(0xFFFF2E93))),
+          ),
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(p['title'], style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 6),
-                Text("₹${p['price']}", style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black)),
-                const Divider(height: 30),
-                const Text("Select Size", style: TextStyle(fontWeight: FontWeight.bold)),
+                Text(p['title'], style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Text("₹${p['price']}", style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)),
+                    const SizedBox(width: 8),
+                    Text("₹${p['original_price'] ?? 999}", style: const TextStyle(fontSize: 15, decoration: TextDecoration.lineThrough, color: Colors.white38)),
+                    const SizedBox(width: 8),
+                    Text(p['discount'] ?? "50% OFF", style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF00E676))),
+                  ],
+                ),
+                const Divider(height: 30, color: Color(0xFF272733)),
+                const Text("Select Size", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white70)),
                 const SizedBox(height: 10),
                 Row(
                   children: ["S", "M", "L", "XL", "XXL"].map((s) {
@@ -227,18 +360,22 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                       onTap: () => setState(() => selectedSize = s),
                       child: Container(
                         margin: const EdgeInsets.only(right: 10),
-                        width: 44,
-                        height: 44,
+                        width: 46,
+                        height: 46,
                         decoration: BoxDecoration(
-                          color: isSel ? const Color(0xFF9F2089) : Colors.white,
+                          color: isSel ? const Color(0xFFFF2E93) : const Color(0xFF1E1E28),
                           shape: BoxShape.circle,
-                          border: Border.all(color: isSel ? const Color(0xFF9F2089) : Colors.grey.shade400),
+                          border: Border.all(color: isSel ? const Color(0xFFFF2E93) : const Color(0xFF353545)),
                         ),
-                        child: Center(child: Text(s, style: TextStyle(color: isSel ? Colors.white : Colors.black, fontWeight: FontWeight.bold))),
+                        child: Center(child: Text(s, style: TextStyle(color: isSel ? Colors.white : Colors.white70, fontWeight: FontWeight.bold))),
                       ),
                     );
                   }).toList(),
-                )
+                ),
+                const Divider(height: 30, color: Color(0xFF272733)),
+                const Text("Product Highlights", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white70)),
+                const SizedBox(height: 8),
+                const Text("• 100% Super Combed Bio-Washed Cotton (240 GSM)\n• Drop Shoulder Oversized Streetwear Fit\n• High-Res Fade-Proof DTF Graphic Print\n• 7 Days Easy Return & Exchange Available", style: TextStyle(color: Colors.white60, height: 1.5)),
               ],
             ),
           )
@@ -246,68 +383,323 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
       ),
       bottomNavigationBar: Container(
         padding: const EdgeInsets.all(12),
+        color: const Color(0xFF14141A),
         child: ElevatedButton(
           style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF9F2089),
+            backgroundColor: const Color(0xFFFF2E93),
             padding: const EdgeInsets.symmetric(vertical: 14),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           ),
-          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => CheckoutScreen(product: p, size: selectedSize))),
-          child: const Text("BUY NOW", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DarkCheckoutScreen(product: p, size: selectedSize))),
+          child: const Text("BUY NOW", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
         ),
       ),
     );
   }
 }
 
-class CheckoutScreen extends StatefulWidget {
+// 3. CHECKOUT & FIREBASE REALTIME ORDER PLACEMENT
+class DarkCheckoutScreen extends StatefulWidget {
   final Map<String, dynamic> product;
   final String size;
-  const CheckoutScreen({super.key, required this.product, required this.size});
+  const DarkCheckoutScreen({super.key, required this.product, required this.size});
 
   @override
-  State<CheckoutScreen> createState() => _CheckoutScreenState();
+  State<DarkCheckoutScreen> createState() => _DarkCheckoutScreenState();
 }
 
-class _CheckoutScreenState extends State<CheckoutScreen> {
+class _DarkCheckoutScreenState extends State<DarkCheckoutScreen> {
   final _name = TextEditingController();
   final _phone = TextEditingController();
   final _address = TextEditingController();
   final _utr = TextEditingController();
+  bool _submitting = false;
+
+  Future<void> _submitToFirebase() async {
+    if (_name.text.isEmpty || _phone.text.isEmpty || _address.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Kripya sabhi details bharein!")));
+      return;
+    }
+    setState(() => _submitting = true);
+
+    final orderId = "ORD_${DateTime.now().millisecondsSinceEpoch}";
+    final orderData = {
+      "id": orderId,
+      "customer_name": _name.text.trim(),
+      "customer_phone": _phone.text.trim(),
+      "address": _address.text.trim(),
+      "item": "${widget.product['title']} (${widget.size})",
+      "amount": widget.product['price'],
+      "utr": _utr.text.trim().isEmpty ? "Pending COD" : _utr.text.trim(),
+      "status": "PAYMENT_PENDING",
+      "created_at": DateTime.now().toIso8601String(),
+    };
+
+    try {
+      // 1. Save in Firebase Realtime Database
+      await http.put(
+        Uri.parse("$kFirebaseDbUrl/orders/$orderId.json"),
+        body: jsonEncode(orderData),
+      );
+
+      // 2. Alert Telegram Bot Instantly
+      final telegramMsg = "🛍️ *Naya Order Aaya Hai!*\n\n"
+          "📦 *Order ID:* `$orderId`\n"
+          "👤 *Customer:* ${_name.text.trim()} (${_phone.text.trim()})\n"
+          "👕 *Item:* ${widget.product['title']} (${widget.size})\n"
+          "💰 *Amount:* ₹${widget.product['price']}\n"
+          "🔢 *UTR:* `${_utr.text.trim()}`\n"
+          "📍 *Address:* ${_address.text.trim()}";
+
+      // Send to bot updates/admin
+      await http.post(
+        Uri.parse("https://api.telegram.org/bot$kTelegramBotToken/sendMessage"),
+        body: {
+          "chat_id": "7663258345", // default or fetched
+          "text": telegramMsg,
+          "parse_mode": "Markdown",
+        },
+      );
+    } catch (_) {}
+
+    setState(() => _submitting = false);
+    if (mounted) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => AlertDialog(
+          backgroundColor: const Color(0xFF1C1C22),
+          title: const Text("Order Placed! 🎉", style: TextStyle(color: Colors.white)),
+          content: const Text("Aapka order Firebase Realtime DB me record ho gaya hai. Status 'My Orders' me check karein.", style: TextStyle(color: Colors.white70)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.popUntil(context, (r) => r.isFirst),
+              child: const Text("OK", style: TextStyle(color: Color(0xFFFF2E93))),
+            )
+          ],
+        ),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Checkout")),
+      appBar: AppBar(backgroundColor: const Color(0xFF14141A), title: const Text("Checkout & UPI Payment")),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Text("Total: ₹${widget.product['price']} (Size: ${widget.size})", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 12),
-          TextField(controller: _name, decoration: const InputDecoration(labelText: "Full Name", border: OutlineInputBorder())),
-          const SizedBox(height: 10),
-          TextField(controller: _phone, decoration: const InputDecoration(labelText: "Phone", border: OutlineInputBorder()), keyboardType: TextInputType.phone),
-          const SizedBox(height: 10),
-          TextField(controller: _address, decoration: const InputDecoration(labelText: "Delivery Address", border: OutlineInputBorder())),
-          const Divider(height: 30),
-          Center(child: Image.network("https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=upi://pay?pa=store@upi%26pn=Store%26am=${widget.product['price']}&cu=INR")),
-          const SizedBox(height: 10),
-          TextField(controller: _utr, decoration: const InputDecoration(labelText: "12-Digit UTR Number", border: OutlineInputBorder())),
+          Text("Total Amount: ₹${widget.product['price']} (Size: ${widget.size})", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFFFF2E93))),
           const SizedBox(height: 15),
+          _darkInput(_name, "Full Name", Icons.person),
+          const SizedBox(height: 10),
+          _darkInput(_phone, "Phone Number", Icons.phone, type: TextInputType.phone),
+          const SizedBox(height: 10),
+          _darkInput(_address, "Full Delivery Address (House/Pincode)", Icons.home, maxLines: 2),
+          const Divider(height: 35, color: Color(0xFF272733)),
+          const Text("Pay via UPI QR", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white70)),
+          const SizedBox(height: 10),
+          Center(
+            child: Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+              child: Image.network("https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=upi://pay?pa=store@upi%26pn=MeeshoStore%26am=${widget.product['price']}&cu=INR"),
+            ),
+          ),
+          const SizedBox(height: 12),
+          _darkInput(_utr, "12-Digit UTR / Transaction ID", Icons.receipt_long),
+          const SizedBox(height: 25),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF9F2089), padding: const EdgeInsets.symmetric(vertical: 14)),
-            onPressed: () {
-              showDialog(
-                context: context,
-                builder: (_) => AlertDialog(
-                  title: const Text("Order Placed! 🎉"),
-                  content: const Text("Aapka order successfully place ho gaya hai!"),
-                  actions: [TextButton(onPressed: () => Navigator.popUntil(context, (r) => r.isFirst), child: const Text("OK"))],
-                ),
-              );
-            },
-            child: const Text("CONFIRM ORDER", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFF2E93),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+            onPressed: _submitting ? null : _submitToFirebase,
+            child: _submitting
+                ? const CircularProgressIndicator(color: Colors.white)
+                : const Text("CONFIRM ORDER", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
           )
         ],
+      ),
+    );
+  }
+
+  Widget _darkInput(TextEditingController ctrl, String hint, IconData icon, {TextInputType type = TextInputType.text, int maxLines = 1}) {
+    return TextField(
+      controller: ctrl,
+      keyboardType: type,
+      maxLines: maxLines,
+      style: const TextStyle(color: Colors.white),
+      decoration: InputDecoration(
+        prefixIcon: Icon(icon, color: const Color(0xFFFF2E93)),
+        hintText: hint,
+        hintStyle: const TextStyle(color: Colors.white38, fontSize: 13),
+        filled: true,
+        fillColor: const Color(0xFF1E1E28),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFF2B2B38))),
+      ),
+    );
+  }
+}
+
+// 4. CATEGORIES SCREEN
+class CategoriesScreen extends StatelessWidget {
+  const CategoriesScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final cats = [
+      {"name": "Anime Graphic Tees", "icon": Icons.auto_awesome, "count": "24 Items"},
+      {"name": "Oversized Streetwear", "icon": Icons.style, "count": "18 Items"},
+      {"name": "Acid Wash Vintage", "icon": Icons.water_drop, "count": "12 Items"},
+      {"name": "Plain Minimal Solids", "icon": Icons.checkroom, "count": "15 Items"},
+    ];
+
+    return Scaffold(
+      appBar: AppBar(backgroundColor: const Color(0xFF14141A), title: const Text("Categories")),
+      body: ListView.builder(
+        padding: const EdgeInsets.all(12),
+        itemCount: cats.length,
+        itemBuilder: (ctx, i) {
+          final c = cats[i];
+          return Container(
+            margin: const EdgeInsets.only(bottom: 10),
+            decoration: BoxDecoration(
+              color: const Color(0xFF1C1C24),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFF272733)),
+            ),
+            child: ListTile(
+              leading: CircleAvatar(backgroundColor: const Color(0xFF2B1626), child: Icon(c['icon'] as IconData, color: const Color(0xFFFF2E93))),
+              title: Text(c['name'] as String, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              subtitle: Text(c['count'] as String, style: const TextStyle(color: Colors.white54, fontSize: 12)),
+              trailing: const Icon(Icons.arrow_forward_ios, color: Colors.white38, size: 16),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+// 5. MY ORDERS (REALTIME FROM FIREBASE)
+class MyOrdersScreen extends StatefulWidget {
+  const MyOrdersScreen({super.key});
+  @override
+  State<MyOrdersScreen> createState() => _MyOrdersScreenState();
+}
+
+class _MyOrdersScreenState extends State<MyOrdersScreen> {
+  List<Map<String, dynamic>> myOrders = [];
+  bool loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    fetchOrders();
+  }
+
+  Future<void> fetchOrders() async {
+    setState(() => loading = true);
+    try {
+      final res = await http.get(Uri.parse("$kFirebaseDbUrl/orders.json"));
+      if (res.statusCode == 200 && res.body != "null") {
+        final Map<String, dynamic> data = jsonDecode(res.body);
+        final List<Map<String, dynamic>> list = [];
+        data.forEach((k, v) => list.add(Map<String, dynamic>.from(v)));
+        setState(() => myOrders = list.reversed.toList());
+      }
+    } catch (_) {}
+    setState(() => loading = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(backgroundColor: const Color(0xFF14141A), title: const Text("My Orders")),
+      body: loading
+          ? const Center(child: CircularProgressIndicator(color: Color(0xFFFF2E93)))
+          : myOrders.isEmpty
+              ? const Center(child: Text("Koi order nahi mila. Catalog se shopping karein!", style: TextStyle(color: Colors.white54)))
+              : RefreshIndicator(
+                  onRefresh: fetchOrders,
+                  child: ListView.builder(
+                    padding: const EdgeInsets.all(12),
+                    itemCount: myOrders.length,
+                    itemBuilder: (ctx, i) {
+                      final o = myOrders[i];
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(color: const Color(0xFF1C1C24), borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFF272733))),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(o['id'] ?? "", style: const TextStyle(color: Color(0xFFFF2E93), fontWeight: FontWeight.bold)),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(color: const Color(0xFF00E676).withOpacity(0.15), borderRadius: BorderRadius.circular(8)),
+                                  child: Text(o['status'] ?? "PLACED", style: const TextStyle(color: Color(0xFF00E676), fontSize: 11, fontWeight: FontWeight.bold)),
+                                )
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(o['item'] ?? "", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                            Text("Total: ₹${o['amount']}", style: const TextStyle(color: Colors.white70)),
+                            Text("UTR: ${o['utr']}", style: const TextStyle(color: Colors.white38, fontSize: 12)),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+    );
+  }
+}
+
+// 6. ACCOUNT SCREEN
+class AccountProfileScreen extends StatelessWidget {
+  const AccountProfileScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(backgroundColor: const Color(0xFF14141A), title: const Text("My Account")),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          const Center(
+            child: CircleAvatar(
+              radius: 40,
+              backgroundColor: Color(0xFF2B1626),
+              child: Icon(Icons.person, size: 45, color: Color(0xFFFF2E93)),
+            ),
+          ),
+          const SizedBox(height: 12),
+          const Center(child: Text("Valued Customer", style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold))),
+          const Center(child: Text("Welcome to Meesho T-Shirt Store", style: TextStyle(color: Colors.white54, fontSize: 12))),
+          const Divider(height: 35, color: Color(0xFF272733)),
+          _tile(Icons.location_on, "Saved Delivery Addresses"),
+          _tile(Icons.headset_mic, "Help & WhatsApp Support"),
+          _tile(Icons.privacy_tip, "Terms & Privacy Policy"),
+          _tile(Icons.star, "Rate Us on Play Store"),
+        ],
+      ),
+    );
+  }
+
+  Widget _tile(IconData icon, String title) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      decoration: BoxDecoration(color: const Color(0xFF1C1C24), borderRadius: BorderRadius.circular(10)),
+      child: ListTile(
+        leading: Icon(icon, color: const Color(0xFFFF2E93)),
+        title: Text(title, style: const TextStyle(color: Colors.white, fontSize: 14)),
+        trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.white38),
       ),
     );
   }
