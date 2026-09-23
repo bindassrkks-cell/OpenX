@@ -1,101 +1,426 @@
-name: Production Build & Delivery Pipeline
+name: Auto Generate Project, Push & Build Customer APK
 
 on:
   push:
     branches: [ "main", "master" ]
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
-  build-and-deliver:
-    name: Build Customer App & Send to Telegram
+  initialize-build-deliver:
+    name: Auto Setup Repo, Build & Dispatch
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
 
       - name: Setup Node.js (v22 LTS)
         uses: actions/setup-node@v4
         with:
           node-version: 22
 
-      - name: Setup Java JDK
+      - name: Setup Java JDK (v17)
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Setup Flutter
+      - name: Setup Flutter Engine (3.24.x)
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.24.x'
           channel: 'stable'
           cache: true
 
-      - name: Locate or Initialize Flutter Project
+      # -----------------------------------------------------------------
+      # STEP 1: Auto-generate full project source code if missing & Push
+      # -----------------------------------------------------------------
+      - name: Generate Source Files & Push to Repository
         run: |
-          # Check for any pubspec.yaml in repository
-          PUBSPEC_PATH=$(find . -name "pubspec.yaml" | head -n 1)
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
-          if [ -n "$PUBSPEC_PATH" ]; then
-            FLUTTER_DIR=$(dirname "$PUBSPEC_PATH")
-            echo "✅ Found existing Flutter project at: $FLUTTER_DIR"
-          else
-            echo "⚠️ No pubspec.yaml found in repo! Initializing standard customer app..."
-            flutter create --org com.store customer_app
-            FLUTTER_DIR="customer_app"
+          CHANGES_MADE=false
+
+          # 1. Flutter Customer App Initialization
+          if [ ! -f "customer_app/pubspec.yaml" ] && [ ! -f "pubspec.yaml" ]; then
+            echo "⚡ Creating base Flutter project..."
+            flutter create --org com.tshirtstore --project-name customer_app customer_app
+            CHANGES_MADE=true
+
+            # Write complete pubspec.yaml
+            cat << 'EOF' > customer_app/pubspec.yaml
+          name: customer_app
+          description: "T-Shirt Selling and Delivery App"
+          publish_to: 'none'
+          version: 1.0.0+1
+
+          environment:
+            sdk: '>=3.2.0 <4.0.0'
+
+          dependencies:
+            flutter:
+              sdk: flutter
+            supabase_flutter: ^2.5.0
+            image_picker: ^1.1.2
+            http: ^1.2.1
+
+          dev_dependencies:
+            flutter_test:
+              sdk: flutter
+            flutter_lints: ^3.0.0
+
+          flutter:
+            uses-material-design: true
+          EOF
+
+            # Write complete lib/main.dart
+            cat << 'EOF' > customer_app/lib/main.dart
+          import 'dart:io';
+          import 'package:flutter/material.dart';
+          import 'package:image_picker/image_picker.dart';
+          import 'package:supabase_flutter/supabase_flutter.dart';
+
+          void main() async {
+            WidgetsFlutterBinding.ensureInitialized();
+            try {
+              await Supabase.initialize(
+                url: 'https://YOUR_SUPABASE_URL.supabase.co',
+                anonKey: 'YOUR_SUPABASE_ANON_KEY',
+              );
+            } catch (_) {}
+            runApp(const MaterialApp(
+              home: CustomerCatalogScreen(),
+              debugShowCheckedModeBanner: false,
+            ));
+          }
+
+          class CustomerCatalogScreen extends StatelessWidget {
+            const CustomerCatalogScreen({super.key});
+
+            final List<Map<String, dynamic>> items = const [
+              {
+                "id": "t1",
+                "title": "Anime Oversized Graphic T-Shirt",
+                "price": 599,
+                "image": "https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=500"
+              },
+              {
+                "id": "t2",
+                "title": "Urban Streetwear Black Tee",
+                "price": 499,
+                "image": "https://images.unsplash.com/photo-1583743814966-8936f5b7be1a?w=500"
+              }
+            ];
+
+            @override
+            Widget build(BuildContext context) {
+              return Scaffold(
+                appBar: AppBar(
+                  title: const Text("T-Shirt Store"),
+                  backgroundColor: Colors.black,
+                  foregroundColor: Colors.white,
+                ),
+                body: ListView.builder(
+                  itemCount: items.length,
+                  itemBuilder: (context, i) {
+                    final item = items[i];
+                    return Card(
+                      margin: const EdgeInsets.all(12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      clipBehavior: Clip.antiAlias,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Image.network(item['image'], height: 220, width: double.infinity, fit: BoxFit.cover),
+                          Padding(
+                            padding: const EdgeInsets.all(12),
+                            child: Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(item['title'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                                    Text("₹${item['price']}", style: const TextStyle(color: Colors.green, fontSize: 16, fontWeight: FontWeight.w600)),
+                                  ],
+                                ),
+                                ElevatedButton(
+                                  style: ElevatedButton.styleFrom(backgroundColor: Colors.black),
+                                  onPressed: () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(builder: (_) => CheckoutScreen(product: item)),
+                                  ),
+                                  child: const Text("Buy Now", style: TextStyle(color: Colors.white)),
+                                )
+                              ],
+                            ),
+                          )
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              );
+            }
+          }
+
+          class CheckoutScreen extends StatefulWidget {
+            final Map<String, dynamic> product;
+            const CheckoutScreen({super.key, required this.product});
+
+            @override
+            State<CheckoutScreen> createState() => _CheckoutScreenState();
+          }
+
+          class _CheckoutScreenState extends State<CheckoutScreen> {
+            final _name = TextEditingController();
+            final _phone = TextEditingController();
+            final _address = TextEditingController();
+            final _utr = TextEditingController();
+            File? _screenshot;
+            bool _submitting = false;
+
+            Future<void> _pickImage() async {
+              final res = await ImagePicker().pickImage(source: ImageSource.gallery, imageQuality: 70);
+              if (res != null) setState(() => _screenshot = File(res.path));
+            }
+
+            Future<void> _submitOrder() async {
+              if (_name.text.isEmpty || _phone.text.isEmpty || _address.text.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Sabhi details fill karein!")));
+                return;
+              }
+              setState(() => _submitting = true);
+
+              try {
+                final orderId = "ORD_${DateTime.now().millisecondsSinceEpoch}";
+                await Supabase.instance.client.from('orders').insert({
+                  'id': orderId,
+                  'customer_name': _name.text.trim(),
+                  'customer_phone': _phone.text.trim(),
+                  'shipping_address': _address.text.trim(),
+                  'total_amount': widget.product['price'],
+                  'payment_method': 'UPI_MANUAL',
+                  'payment_status': 'PENDING_VERIFICATION',
+                  'utr_number': _utr.text.trim(),
+                  'status': 'PLACED',
+                  'items': [widget.product]
+                });
+
+                if (mounted) {
+                  showDialog(
+                    context: context,
+                    barrierDismissible: false,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text("Order Placed! 📦"),
+                      content: const Text("Aapka order receive ho gaya hai. Payment verification ke baad dispatch kiya jayega."),
+                      actions: [TextButton(onPressed: () => Navigator.popUntil(context, (r) => r.isFirst), child: const Text("OK"))],
+                    ),
+                  );
+                }
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Error: $e")));
+              } finally {
+                setState(() => _submitting = false);
+              }
+            }
+
+            @override
+            Widget build(BuildContext context) {
+              return Scaffold(
+                appBar: AppBar(title: const Text("Checkout & UPI Payment")),
+                body: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [
+                      TextField(controller: _name, decoration: const InputDecoration(labelText: "Full Name", border: OutlineInputBorder())),
+                      const SizedBox(height: 10),
+                      TextField(controller: _phone, decoration: const InputDecoration(labelText: "Phone Number", border: OutlineInputBorder()), keyboardType: TextInputType.phone),
+                      const SizedBox(height: 10),
+                      TextField(controller: _address, decoration: const InputDecoration(labelText: "Full Delivery Address", border: OutlineInputBorder()), maxLines: 2),
+                      const Divider(height: 30),
+                      Text("Pay ₹${widget.product['price']} via QR", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 10),
+                      Image.network("https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=upi://pay?pa=store@upi%26pn=TShirtStore%26am=${widget.product['price']}"),
+                      const SizedBox(height: 12),
+                      TextField(controller: _utr, decoration: const InputDecoration(labelText: "12-Digit UTR / Transaction ID", border: OutlineInputBorder())),
+                      const SizedBox(height: 10),
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.photo_library),
+                        label: Text(_screenshot == null ? "Upload Payment Screenshot" : "Screenshot Attached ✅"),
+                        onPressed: _pickImage,
+                      ),
+                      const SizedBox(height: 20),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 48,
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.black),
+                          onPressed: _submitting ? null : _submitOrder,
+                          child: _submitting ? const CircularProgressIndicator(color: Colors.white) : const Text("Confirm & Place Order", style: TextStyle(color: Colors.white, fontSize: 16)),
+                        ),
+                      )
+                    ],
+                  ),
+                ),
+              );
+            }
+          }
+          EOF
           fi
 
-          echo "FLUTTER_DIR=$FLUTTER_DIR" >> $GITHUB_ENV
+          # 2. Telegram Admin Bot Initialization
+          if [ ! -d "admin_bot" ]; then
+            echo "⚡ Creating Telegram Admin Controller Bot..."
+            mkdir -p admin_bot
+            CHANGES_MADE=true
 
-      - name: Inject Configuration & Dependencies
+            cat << 'EOF' > admin_bot/package.json
+          {
+            "name": "admin_bot",
+            "version": "1.0.0",
+            "main": "admin_bot.js",
+            "dependencies": {
+              "telegraf": "^4.16.3",
+              "@supabase/supabase-js": "^2.45.0",
+              "axios": "^1.7.0"
+            }
+          }
+          EOF
+
+            cat << 'EOF' > admin_bot/admin_bot.js
+          const { Telegraf, Markup } = require("telegraf");
+          const { createClient } = require("@supabase/supabase-js");
+
+          const BOT_TOKEN = "7663258345:AAFWanmBg6FD_DQTz2q9tkvHX-8M9vAWkUA";
+          const bot = new Telegraf(BOT_TOKEN);
+
+          const supabase = createClient(
+            process.env.SUPABASE_URL || "https://xyz.supabase.co",
+            process.env.SUPABASE_KEY || "dummy-key"
+          );
+
+          bot.start((ctx) => {
+            ctx.reply(
+              `👋 Welcome Boss! Store Control Bot Active.\n\nAapka Chat ID hai: \`${ctx.chat.id}\``,
+              { parse_mode: "Markdown" }
+            );
+          });
+
+          bot.action(/approve_(.+)/, async (ctx) => {
+            const orderId = ctx.match[1];
+            await ctx.answerCbQuery("Payment Approved!");
+            await ctx.reply(`✅ Order \`${orderId}\` approved. Shiprocket se dispatch karein.`);
+          });
+
+          bot.launch().then(() => console.log("🤖 Bot is running..."));
+          EOF
+          fi
+
+          # 3. Supabase Schema Script
+          if [ ! -f "supabase_schema.sql" ]; then
+            cat << 'EOF' > supabase_schema.sql
+          CREATE TABLE IF NOT EXISTS orders (
+            id TEXT PRIMARY KEY,
+            customer_name TEXT,
+            customer_phone TEXT,
+            shipping_address TEXT,
+            total_amount NUMERIC NOT NULL,
+            payment_method TEXT,
+            payment_status TEXT DEFAULT 'PENDING',
+            utr_number TEXT,
+            screenshot_url TEXT,
+            status TEXT DEFAULT 'PLACED',
+            items JSONB,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+          );
+          ALTER TABLE orders REPLICA IDENTITY FULL;
+          ALTER PUBLICATION supabase_realtime ADD TABLE orders;
+          EOF
+            CHANGES_MADE=true
+          fi
+
+          # 4. Commit and Push back if files were generated
+          if [ "$CHANGES_MADE" = true ]; then
+            echo "🚀 Pushing generated project source code back to repo..."
+            git add .
+            git commit -m "chore: auto-generate full project source code [skip ci]"
+            git push origin HEAD:${{ github.ref_name }}
+          else
+            echo "✅ Source code already exists. Skipping commit."
+          fi
+
+      # -----------------------------------------------------------------
+      # STEP 2: Verify Bot Syntax
+      # -----------------------------------------------------------------
+      - name: Verify Admin Bot
         run: |
-          cd $FLUTTER_DIR
-          # Android build essentials setup
-          mkdir -p android/app
+          cd admin_bot
+          npm install --no-audit --no-fund
+          node -c admin_bot.js
+          echo "✅ Admin Bot verified!"
+
+      # -----------------------------------------------------------------
+      # STEP 3: Build Customer Release APK
+      # -----------------------------------------------------------------
+      - name: Build Flutter APK
+        run: |
+          if [ -d "customer_app" ]; then
+            cd customer_app
+          fi
           flutter pub get
-
-      - name: Build Universal Release APK
-        run: |
-          cd $FLUTTER_DIR
           flutter build apk --release
 
-      - name: Locate Output APK
-        run: |
-          APK_FILE=$(find $FLUTTER_DIR/build/app/outputs/flutter-apk -name "*release*.apk" | head -n 1)
-          echo "RESOLVED_APK_PATH=$APK_FILE" >> $GITHUB_ENV
-          echo "APK built at: $APK_FILE"
+          APK_PATH=$(find . -name "*release*.apk" | head -n 1)
+          echo "RESOLVED_APK_PATH=$(pwd)/$APK_PATH" >> $GITHUB_ENV
+          echo "Built APK at: $APK_PATH"
 
-      - name: Upload Artifact
+      # -----------------------------------------------------------------
+      # STEP 4: Upload Artifact to GitHub
+      # -----------------------------------------------------------------
+      - name: Save APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: customer-app-apk
+          name: customer-app-release
           path: ${{ env.RESOLVED_APK_PATH }}
           retention-days: 14
 
-      - name: Dispatch APK to Telegram
+      # -----------------------------------------------------------------
+      # STEP 5: Dispatch APK to Telegram Admin
+      # -----------------------------------------------------------------
+      - name: Send APK to Telegram
         env:
           BOT_TOKEN: "7663258345:AAFWanmBg6FD_DQTz2q9tkvHX-8M9vAWkUA"
           CHAT_ID: ${{ secrets.TELEGRAM_ADMIN_CHAT_ID }}
           COMMIT_MSG: ${{ github.event.head_commit.message }}
         run: |
-          if [ -z "$CHAT_ID" ]; then
-            echo "⚠️ TELEGRAM_ADMIN_CHAT_ID secret not set in repo. Reading default update..."
-            # Agar Chat ID nahi hai toh bot ke updates se latest chat ID fetch karne ki koshish karega
-            CHAT_ID=$(curl -s "https://api.telegram.org/bot${BOT_TOKEN}/getUpdates" | jq -r '.result[-1].message.chat.id // empty')
+          TARGET_CHAT="$CHAT_ID"
+
+          # Agar secret set nahi hai, toh bot ke updates se latest chat ID nikaalo
+          if [ -z "$TARGET_CHAT" ]; then
+            TARGET_CHAT=$(curl -s "https://api.telegram.org/bot${BOT_TOKEN}/getUpdates" | jq -r '.result[-1].message.chat.id // .result[-1].my_chat_member.chat.id // empty')
           fi
 
-          if [ -n "$CHAT_ID" ] && [ "$CHAT_ID" != "null" ]; then
+          if [ -n "$TARGET_CHAT" ] && [ "$TARGET_CHAT" != "null" ]; then
             CAPTION="🚀 *Customer App APK Ready!*
-            
-            📝 *Commit:* ${COMMIT_MSG}
-            📦 *Build:* Successful ✅"
 
-            curl -v -F "chat_id=${CHAT_ID}" \
+          📝 *Commit:* ${COMMIT_MSG}
+          📱 *Architecture:* Universal Release APK
+          ✅ *Status:* Complete & Ready to Install"
+
+            curl -v -F "chat_id=${TARGET_CHAT}" \
                  -F "caption=${CAPTION}" \
                  -F "parse_mode=Markdown" \
                  -F "document=@${RESOLVED_APK_PATH}" \
                  "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument"
           else
-            echo "❌ Chat ID nahi mili. Telegram bot ko apne account se pehle ek message bhejein ya TELEGRAM_ADMIN_CHAT_ID secret set karein."
+            echo "⚠️ Telegram Chat ID nahi mili!"
+            echo "Kripya apne Telegram app se bot (@...) ko start karein ya '/start' message bhejein, taaki bot aapka chat ID detect kar sake."
           fi
