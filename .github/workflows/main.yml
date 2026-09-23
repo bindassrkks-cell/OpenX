@@ -1,60 +1,51 @@
-name: Build Meesho Customer & Admin APKs
+name: Meesho Store Build
 
 on:
   push:
-    branches: [ "main", "master" ]
+    branches:
+      - main
+      - master
   workflow_dispatch:
 
-permissions:
-  contents: write
-
 jobs:
-  generate-push-and-build:
-    name: Auto Generate, Push & Build Optimized APKs
+  build-and-deploy:
+    name: Generate Code, Push to Repo & Build APKs
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
-      - name: Setup Java JDK (v17)
+      - name: Setup Java JDK
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
-          java-version: '17'
+          distribution: temurin
+          java-version: 17
 
-      - name: Setup Flutter Engine (3.24.x)
+      - name: Setup Flutter Engine
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.24.x'
-          channel: 'stable'
+          flutter-version: 3.24.5
+          channel: stable
           cache: true
 
-      # -----------------------------------------------------------------
-      # STEP 1: Generate Full Modern Android v2 Projects (Customer + Admin)
-      # -----------------------------------------------------------------
-      - name: Setup & Modernize Codebase
+      - name: Generate Projects via Python
         run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          python3 - << 'EOF'
+          import os, subprocess
 
-          CHANGES_MADE=false
+          # 1. Customer App Generation
+          if not os.path.exists("customer_app/android"):
+              subprocess.run(["flutter", "create", "--org", "com.meesho.tshirt", "--project-name", "customer_app", "--platforms", "android", "customer_app"], check=True)
 
-          # 1. SETUP CUSTOMER APP (Meesho Style)
-          if [ ! -d "customer_app/android" ]; then
-            echo "⚡ Generating Customer App with modern Android v2 embedding..."
-            rm -rf customer_app
-            flutter create --org com.meesho.tshirt --project-name customer_app --platforms=android customer_app
-            CHANGES_MADE=true
-          fi
-
-          # Write Customer pubspec.yaml
-          cat << 'EOF' > customer_app/pubspec.yaml
-          name: customer_app
-          description: "Meesho-Style Custom T-Shirt Store"
+          # Customer pubspec.yaml
+          with open("customer_app/pubspec.yaml", "w", encoding="utf-8") as f:
+              f.write("""name: customer_app
+          description: "Meesho Style Custom T-Shirt Store"
           publish_to: 'none'
           version: 1.0.0+1
 
@@ -74,19 +65,16 @@ jobs:
 
           flutter:
             uses-material-design: true
-          EOF
-
-          # Customer Single DEX & Size Optimization in build.gradle
-          sed -i 's/minSdkVersion .*/minSdkVersion 21/' customer_app/android/app/build.gradle || true
-          sed -i 's/targetSdkVersion .*/targetSdkVersion 34/' customer_app/android/app/build.gradle || true
+          """)
 
           # Customer google-services.json
-          cat << 'EOF' > customer_app/android/app/google-services.json
-          {
+          os.makedirs("customer_app/android/app", exist_ok=True)
+          with open("customer_app/android/app/google-services.json", "w", encoding="utf-8") as f:
+              f.write("""{
             "project_info": {
               "project_number": "123456789000",
-              "project_id": "meesho-tshirt-customer",
-              "storage_bucket": "meesho-tshirt-customer.appspot.com"
+              "project_id": "meesho-customer-store",
+              "storage_bucket": "meesho-customer-store.appspot.com"
             },
             "client": [
               {
@@ -98,12 +86,12 @@ jobs:
               }
             ],
             "configuration_version": "1"
-          }
-          EOF
+          }""")
 
-          # Customer Meesho UI (main.dart)
-          cat << 'EOF' > customer_app/lib/main.dart
-          import 'dart:io';
+          # Customer main.dart (Full Meesho UI)
+          os.makedirs("customer_app/lib", exist_ok=True)
+          with open("customer_app/lib/main.dart", "w", encoding="utf-8") as f:
+              f.write("""import 'dart:io';
           import 'package:flutter/material.dart';
           import 'package:image_picker/image_picker.dart';
 
@@ -117,7 +105,7 @@ jobs:
             @override
             Widget build(BuildContext context) {
               return MaterialApp(
-                title: 'Meesho T-Shirt Store',
+                title: 'T-Shirt Store',
                 debugShowCheckedModeBanner: false,
                 theme: ThemeData(
                   primaryColor: const Color(0xFF9F2089),
@@ -125,19 +113,18 @@ jobs:
                   colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF9F2089)),
                   useMaterial3: true,
                 ),
-                home: const MainHomeScreen(),
+                home: const HomeScreen(),
               );
             }
           }
 
-          class MainHomeScreen extends StatefulWidget {
-            const MainHomeScreen({super.key});
-
+          class HomeScreen extends StatefulWidget {
+            const HomeScreen({super.key});
             @override
-            State<MainHomeScreen> createState() => _MainHomeScreenState();
+            State<HomeScreen> createState() => _HomeScreenState();
           }
 
-          class _MainHomeScreenState extends State<MainHomeScreen> {
+          class _HomeScreenState extends State<HomeScreen> {
             int _navIndex = 0;
 
             final List<Map<String, dynamic>> products = const [
@@ -176,7 +163,7 @@ jobs:
                 "discount": "50% OFF",
                 "rating": "4.4 ★",
                 "image": "https://images.unsplash.com/photo-1562157873-818bc0726f68?w=500"
-              },
+              }
             ];
 
             @override
@@ -231,11 +218,20 @@ jobs:
                         return GestureDetector(
                           onTap: () => Navigator.push(ctx, MaterialPageRoute(builder: (_) => ProductDetailScreen(product: p))),
                           child: Container(
-                            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.grey.shade200)),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.grey.shade200),
+                            ),
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Expanded(child: ClipRRect(borderRadius: const BorderRadius.vertical(top: Radius.circular(8)), child: Image.network(p['image'], width: double.infinity, fit: BoxFit.cover))),
+                                Expanded(
+                                  child: ClipRRect(
+                                    borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+                                    child: Image.network(p['image'], width: double.infinity, fit: BoxFit.cover),
+                                  ),
+                                ),
                                 Padding(
                                   padding: const EdgeInsets.all(8.0),
                                   child: Column(
@@ -398,7 +394,7 @@ jobs:
                           context: context,
                           builder: (_) => AlertDialog(
                             title: const Text("Order Placed! 🎉"),
-                            content: const Text("Aapka order receive ho gaya hai!"),
+                            content: const Text("Aapka order successfully place ho gaya hai!"),
                             actions: [TextButton(onPressed: () => Navigator.popUntil(context, (r) => r.isFirst), child: const Text("OK"))],
                           ),
                         );
@@ -410,20 +406,16 @@ jobs:
               );
             }
           }
-          EOF
+          """)
 
-          # 2. SETUP ADMIN APP (Telegram Polling Controller)
-          if [ ! -d "admin_app/android" ]; then
-            echo "⚡ Generating Admin App with modern Android v2 embedding..."
-            rm -rf admin_app
-            flutter create --org com.meesho.admin --project-name admin_app --platforms=android admin_app
-            CHANGES_MADE=true
-          fi
+          # 2. Admin App Generation (With Telegram Poller)
+          if not os.path.exists("admin_app/android"):
+              subprocess.run(["flutter", "create", "--org", "com.meesho.admin", "--project-name", "admin_app", "--platforms", "android", "admin_app"], check=True)
 
-          # Write Admin pubspec.yaml
-          cat << 'EOF' > admin_app/pubspec.yaml
-          name: admin_app
-          description: "T-Shirt Store Admin & Telegram Poller"
+          # Admin pubspec.yaml
+          with open("admin_app/pubspec.yaml", "w", encoding="utf-8") as f:
+              f.write("""name: admin_app
+          description: "Store Admin & Telegram Poller"
           publish_to: 'none'
           version: 1.0.0+1
 
@@ -442,19 +434,16 @@ jobs:
 
           flutter:
             uses-material-design: true
-          EOF
-
-          # Admin Single DEX & Optimization
-          sed -i 's/minSdkVersion .*/minSdkVersion 21/' admin_app/android/app/build.gradle || true
-          sed -i 's/targetSdkVersion .*/targetSdkVersion 34/' admin_app/android/app/build.gradle || true
+          """)
 
           # Admin google-services.json
-          cat << 'EOF' > admin_app/android/app/google-services.json
-          {
+          os.makedirs("admin_app/android/app", exist_ok=True)
+          with open("admin_app/android/app/google-services.json", "w", encoding="utf-8") as f:
+              f.write("""{
             "project_info": {
               "project_number": "123456789000",
-              "project_id": "meesho-tshirt-admin",
-              "storage_bucket": "meesho-tshirt-admin.appspot.com"
+              "project_id": "meesho-admin-store",
+              "storage_bucket": "meesho-admin-store.appspot.com"
             },
             "client": [
               {
@@ -466,12 +455,12 @@ jobs:
               }
             ],
             "configuration_version": "1"
-          }
-          EOF
+          }""")
 
-          # Admin UI with In-App Telegram Polling Engine (main.dart)
-          cat << 'EOF' > admin_app/lib/main.dart
-          import 'dart:async';
+          # Admin main.dart (Telegram Live Poller)
+          os.makedirs("admin_app/lib", exist_ok=True)
+          with open("admin_app/lib/main.dart", "w", encoding="utf-8") as f:
+              f.write("""import 'dart:async';
           import 'dart:convert';
           import 'package:flutter/material.dart';
           import 'package:http/http.dart' as http;
@@ -545,10 +534,10 @@ jobs:
             }
 
             void _respond(dynamic chatId, String text) async {
-              String reply = "Boss! Store is Active. Type /orders to see list.";
-              if (text == "/orders") reply = "📦 *Orders:* #ORD_101 (₹499) - Anime Tee";
+              String reply = "Store Admin is Active. Type /orders to see list.";
+              if (text == "/orders") reply = "Orders: #ORD_101 (Rs. 499) - Tokyo Anime Tee";
               final url = Uri.parse("https://api.telegram.org/bot$botToken/sendMessage");
-              await http.post(url, body: {"chat_id": chatId.toString(), "text": reply, "parse_mode": "Markdown"});
+              await http.post(url, body: {"chat_id": chatId.toString(), "text": reply});
               setState(() => logs.insert(0, "Chat: $chatId sent '$text'"));
             }
 
@@ -556,7 +545,7 @@ jobs:
             Widget build(BuildContext context) {
               return Scaffold(
                 appBar: AppBar(
-                  title: const Text("Store Admin & Bot Poller", style: TextStyle(color: Colors.white, fontSize: 16)),
+                  title: const Text("Admin & Telegram Poller", style: TextStyle(color: Colors.white, fontSize: 16)),
                   backgroundColor: Colors.black,
                   actions: [
                     Container(
@@ -578,7 +567,7 @@ jobs:
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             const Text("Order #ORD_101", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                            const Text("Item: Tokyo Anime Tee (L) - ₹499"),
+                            const Text("Item: Tokyo Anime Tee (L) - Rs. 499"),
                             const Text("UTR: 498129038102", style: TextStyle(color: Colors.blueGrey, fontWeight: FontWeight.bold)),
                             const SizedBox(height: 12),
                             Row(
@@ -615,70 +604,54 @@ jobs:
               );
             }
           }
+          """)
+          print("SUCCESS: Code generated perfectly!")
           EOF
 
-          # 3. Commit & Push Code to Repo
+      - name: Commit and Push Code to Repository
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add customer_app admin_app
           if ! git diff --cached --quiet; then
-            echo "🚀 Pushing complete projects back to repository..."
-            git commit -m "feat: setup full android v2 customer and admin apps [skip ci]"
+            git commit -m "feat: setup meesho customer and admin projects [skip ci]"
             git push origin HEAD:${{ github.ref_name }}
           fi
 
-      # -----------------------------------------------------------------
-      # STEP 2: Build Small Single-DEX Customer App APK
-      # -----------------------------------------------------------------
-      - name: Build Customer APK
+      - name: Build Single DEX Customer APK
         run: |
           cd customer_app
           flutter pub get
-          # Target ARM64 for single dex, minimal size and fastest performance
           flutter build apk --release --target-platform android-arm64
+          APK=$(find build/app/outputs/flutter-apk -name "*release*.apk" | head -n 1)
+          echo "CUST_APK=$(pwd)/$APK" >> $GITHUB_ENV
 
-          APK_PATH=$(find build/app/outputs/flutter-apk -name "*release*.apk" | head -n 1)
-          echo "CUSTOMER_APK=$(pwd)/$APK_PATH" >> $GITHUB_ENV
-          echo "Customer APK Size: $(du -sh $APK_PATH)"
-
-      # -----------------------------------------------------------------
-      # STEP 3: Build Small Single-DEX Admin App APK
-      # -----------------------------------------------------------------
-      - name: Build Admin APK
+      - name: Build Single DEX Admin APK
         run: |
           cd admin_app
           flutter pub get
           flutter build apk --release --target-platform android-arm64
+          APK=$(find build/app/outputs/flutter-apk -name "*release*.apk" | head -n 1)
+          echo "ADM_APK=$(pwd)/$APK" >> $GITHUB_ENV
 
-          APK_PATH=$(find build/app/outputs/flutter-apk -name "*release*.apk" | head -n 1)
-          echo "ADMIN_APK=$(pwd)/$APK_PATH" >> $GITHUB_ENV
-          echo "Admin APK Size: $(du -sh $APK_PATH)"
-
-      # -----------------------------------------------------------------
-      # STEP 4: Send Both APKs to Telegram
-      # -----------------------------------------------------------------
-      - name: Dispatch APKs to Telegram
+      - name: Send APKs to Telegram
         env:
           BOT_TOKEN: "7663258345:AAFWanmBg6FD_DQTz2q9tkvHX-8M9vAWkUA"
           CHAT_ID: ${{ secrets.TELEGRAM_ADMIN_CHAT_ID }}
         run: |
-          TARGET_CHAT="$CHAT_ID"
-          if [ -z "$TARGET_CHAT" ]; then
-            TARGET_CHAT=$(curl -s "https://api.telegram.org/bot${BOT_TOKEN}/getUpdates" | jq -r '.result[-1].message.chat.id // .result[-1].my_chat_member.chat.id // empty')
+          TARGET="$CHAT_ID"
+          if [ -z "$TARGET" ]; then
+            TARGET=$(curl -s "https://api.telegram.org/bot${BOT_TOKEN}/getUpdates" | jq -r '.result[-1].message.chat.id // .result[-1].my_chat_member.chat.id // empty')
           fi
 
-          if [ -n "$TARGET_CHAT" ] && [ "$TARGET_CHAT" != "null" ]; then
-            # 1. Customer APK
-            curl -v -F "chat_id=${TARGET_CHAT}" \
-                 -F "caption=🛍️ *Meesho Style Customer App APK (Optimized Single DEX)* ✅" \
-                 -F "parse_mode=Markdown" \
-                 -F "document=@${CUSTOMER_APK}" \
+          if [ -n "$TARGET" ] && [ "$TARGET" != "null" ]; then
+            curl -F "chat_id=${TARGET}" \
+                 -F "caption=🛍️ Meesho Customer App APK (Single DEX)" \
+                 -F "document=@${CUST_APK}" \
                  "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument"
 
-            # 2. Admin APK
-            curl -v -F "chat_id=${TARGET_CHAT}" \
-                 -F "caption=👑 *Store Admin + Telegram Polling APK (Optimized Single DEX)* ✅" \
-                 -F "parse_mode=Markdown" \
-                 -F "document=@${ADMIN_APK}" \
+            curl -F "chat_id=${TARGET}" \
+                 -F "caption=👑 Store Admin App APK (Single DEX)" \
+                 -F "document=@${ADM_APK}" \
                  "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument"
-          else
-            echo "⚠️ Telegram Chat ID nahi mila! Bot ko ek baar Telegram par '/start' bhej dein."
           fi
