@@ -1,4 +1,4 @@
-name: Build Meesho Customer and Admin Apps
+name: Build and Release Meesho Customer & Admin APKs
 
 on:
   push:
@@ -11,8 +11,8 @@ permissions:
   contents: write
 
 jobs:
-  build-and-deliver:
-    name: Setup Projects, Push Code & Build APKs
+  build-and-release:
+    name: Build, Release Tag & Deliver APKs
     runs-on: ubuntu-latest
 
     steps:
@@ -34,7 +34,9 @@ jobs:
           channel: 'stable'
           cache: true
 
+      # -------------------------------------------------------------
       # STEP 1: Fresh Android v2 Project Structure
+      # -------------------------------------------------------------
       - name: Initialize Fresh Android v2 Projects
         run: |
           rm -rf customer_app admin_app
@@ -43,7 +45,9 @@ jobs:
           cd customer_app && flutter pub add http image_picker && cd ..
           cd admin_app && flutter pub add http && cd ..
 
-      # STEP 2: Inject Google Services JSON Placeholder
+      # -------------------------------------------------------------
+      # STEP 2: Inject Google Services JSON
+      # -------------------------------------------------------------
       - name: Inject Google Services JSON
         run: |
           mkdir -p customer_app/android/app admin_app/android/app
@@ -51,7 +55,9 @@ jobs:
           echo "$JSON_CONTENT" > customer_app/android/app/google-services.json
           echo "$JSON_CONTENT" > admin_app/android/app/google-services.json
 
-      # STEP 3: Write Customer App (Meesho Pink Theme UI)
+      # -------------------------------------------------------------
+      # STEP 3: Write Customer App Code
+      # -------------------------------------------------------------
       - name: Write Customer App Main Code
         env:
           CUSTOMER_DART: |
@@ -372,7 +378,9 @@ jobs:
         run: |
           node -e 'require("fs").writeFileSync("customer_app/lib/main.dart", process.env.CUSTOMER_DART)'
 
-      # STEP 4: Write Admin App (Telegram Poller UI)
+      # -------------------------------------------------------------
+      # STEP 4: Write Admin App Code (Telegram Poller)
+      # -------------------------------------------------------------
       - name: Write Admin App Main Code
         env:
           ADMIN_DART: |
@@ -523,36 +531,70 @@ jobs:
         run: |
           node -e 'require("fs").writeFileSync("admin_app/lib/main.dart", process.env.ADMIN_DART)'
 
-      # STEP 5: Push Generated Projects to GitHub Repo
-      - name: Commit & Push Full Projects to Repository
+      # -------------------------------------------------------------
+      # STEP 5: Push Generated Source Files to Repo
+      # -------------------------------------------------------------
+      - name: Commit & Push Code to Repository
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add customer_app admin_app
           if ! git diff --cached --quiet; then
-            git commit -m "feat: complete meesho customer & admin apps with v2 embedding [skip ci]"
+            git commit -m "feat: setup clean customer and admin apps [skip ci]"
             git push origin HEAD:${GITHUB_REF_NAME}
           fi
 
-      # STEP 6: Build Single-DEX Customer App APK
-      - name: Build Customer APK
+      # -------------------------------------------------------------
+      # STEP 6: Build Single DEX Customer APK
+      # -------------------------------------------------------------
+      - name: Build Single DEX Customer APK
         run: |
           cd customer_app
           flutter pub get
           flutter build apk --release --target-platform android-arm64
-          APK=$(find build/app/outputs/flutter-apk -name "*release*.apk" | head -n 1)
-          echo "CUST_APK=$(pwd)/$APK" >> $GITHUB_ENV
+          CUST_FILE=$(find build/app/outputs/flutter-apk -name "*release*.apk" | head -n 1)
+          cp "$CUST_FILE" ../Meesho_Customer_App.apk
+          cd ..
 
-      # STEP 7: Build Single-DEX Admin App APK
-      - name: Build Admin APK
+      # -------------------------------------------------------------
+      # STEP 7: Build Single DEX Admin APK
+      # -------------------------------------------------------------
+      - name: Build Single DEX Admin APK
         run: |
           cd admin_app
           flutter pub get
           flutter build apk --release --target-platform android-arm64
-          APK=$(find build/app/outputs/flutter-apk -name "*release*.apk" | head -n 1)
-          echo "ADM_APK=$(pwd)/$APK" >> $GITHUB_ENV
+          ADM_FILE=$(find build/app/outputs/flutter-apk -name "*release*.apk" | head -n 1)
+          cp "$ADM_FILE" ../Store_Admin_App.apk
+          cd ..
 
-      # STEP 8: Dispatch Both APKs to Telegram
+      # -------------------------------------------------------------
+      # STEP 8: Create Official GitHub Release Tag & Attach APKs
+      # -------------------------------------------------------------
+      - name: Publish GitHub Release & Upload APKs
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "v1.0.${{ github.run_number }}"
+          name: "Release v1.0.${{ github.run_number }} (Meesho Store & Admin APKs)"
+          body: |
+            ### 🛍️ Meesho T-Shirt Store Releases
+
+            Dono Optimized Single-DEX APKs yahan download ke liye ready hain:
+            - **Meesho_Customer_App.apk**: Customer Shopping App (Meesho Theme, Size Selection, QR Payment)
+            - **Store_Admin_App.apk**: Admin App (Live Telegram Polling, Order Approvals, Dispatch)
+
+            Niche **Assets** section par click karke direct download karein.
+          files: |
+            Meesho_Customer_App.apk
+            Store_Admin_App.apk
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # -------------------------------------------------------------
+      # STEP 9: Send APKs to Telegram
+      # -------------------------------------------------------------
       - name: Send APKs to Telegram
         env:
           BOT_TOKEN: "7663258345:AAFWanmBg6FD_DQTz2q9tkvHX-8M9vAWkUA"
@@ -565,14 +607,14 @@ jobs:
 
           if [ -n "$TARGET" ] && [ "$TARGET" != "null" ]; then
             curl -F "chat_id=${TARGET}" \
-                 -F "caption=🛍️ *Meesho Style Customer App APK (Single DEX)* ✅" \
+                 -F "caption=🛍️ *Meesho Customer App APK (Single DEX)* ✅" \
                  -F "parse_mode=Markdown" \
-                 -F "document=@${CUST_APK}" \
+                 -F "document=@Meesho_Customer_App.apk" \
                  "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument"
 
             curl -F "chat_id=${TARGET}" \
-                 -F "caption=👑 *Store Admin App APK (Single DEX + Telegram Poller)* ✅" \
+                 -F "caption=👑 *Store Admin App APK (Single DEX)* ✅" \
                  -F "parse_mode=Markdown" \
-                 -F "document=@${ADM_APK}" \
+                 -F "document=@Store_Admin_App.apk" \
                  "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument"
           fi
