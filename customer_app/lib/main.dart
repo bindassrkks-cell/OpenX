@@ -12,7 +12,7 @@ class MeeshoCustomerApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'T-Shirt Store',
+      title: 'Meesho T-Shirt Store',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         primaryColor: const Color(0xFF9F2089),
@@ -273,7 +273,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   final _phone = TextEditingController();
   final _address = TextEditingController();
   final _utr = TextEditingController();
-  File? _proof;
 
   @override
   Widget build(BuildContext context) {

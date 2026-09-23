@@ -1,17 +1,1 @@
-{
-  "project_info": {
-    "project_number": "123456789000",
-    "project_id": "meesho-admin-store",
-    "storage_bucket": "meesho-admin-store.appspot.com"
-  },
-  "client": [
-    {
-      "client_info": {
-        "mobilesdk_app_id": "1:123456789000:android:adminapp",
-        "android_client_info": { "package_name": "com.meesho.admin.admin_app" }
-      },
-      "api_key": [{ "current_key": "AIzaSyDummyKeyReplaceWithActualFirebaseKey" }]
-    }
-  ],
-  "configuration_version": "1"
-}
+{"project_info":{"project_number":"123456789000","project_id":"meesho-store","storage_bucket":"meesho-store.appspot.com"},"client":[{"client_info":{"mobilesdk_app_id":"1:123456789000:android:app","android_client_info":{"package_name":"com.meesho.tshirt"}},"api_key":[{"current_key":"AIzaSyDummyKeyReplaceWithActualFirebaseKey"}]}],"configuration_version":"1"}
