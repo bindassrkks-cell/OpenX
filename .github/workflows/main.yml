@@ -1,4 +1,4 @@
-name: Meesho Store Build
+name: Meesho Store Build Pipeline
 
 on:
   push:
@@ -7,44 +7,57 @@ on:
       - master
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
-  build-and-deploy:
-    name: Generate Code, Push to Repo & Build APKs
+  build-and-deliver:
+    name: Clean v2 Setup, Push & Build Optimized APKs
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
+          token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
-      - name: Setup Java JDK
+      - name: Setup Java JDK (v17)
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
 
-      - name: Setup Flutter Engine
+      - name: Setup Flutter Engine (3.24.5)
         uses: subosito/flutter-action@v2
         with:
           flutter-version: 3.24.5
           channel: stable
           cache: true
 
-      - name: Generate Projects via Python
+      # -------------------------------------------------------------
+      # STEP 1: Fix Android v1 Embedding & Setup Projects
+      # -------------------------------------------------------------
+      - name: Setup Customer & Admin Projects (Android v2)
         run: |
-          python3 - << 'EOF'
-          import os, subprocess
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
 
-          # 1. Customer App Generation
-          if not os.path.exists("customer_app/android"):
-              subprocess.run(["flutter", "create", "--org", "com.meesho.tshirt", "--project-name", "customer_app", "--platforms", "android", "customer_app"], check=True)
+          # 1. SETUP CUSTOMER APP
+          if [ ! -d "customer_app/lib" ]; then
+            rm -rf customer_app
+            flutter create --org com.meesho.tshirt --project-name customer_app --platforms=android customer_app
+          else
+            # Ensure modern android v2 embedding
+            cd customer_app
+            rm -rf android
+            flutter create --org com.meesho.tshirt --project-name customer_app --platforms=android .
+            cd ..
+          fi
 
           # Customer pubspec.yaml
-          with open("customer_app/pubspec.yaml", "w", encoding="utf-8") as f:
-              f.write("""name: customer_app
+          cat << 'EOF' > customer_app/pubspec.yaml
+          name: customer_app
           description: "Meesho Style Custom T-Shirt Store"
           publish_to: 'none'
           version: 1.0.0+1
@@ -65,12 +78,12 @@ jobs:
 
           flutter:
             uses-material-design: true
-          """)
+          EOF
 
           # Customer google-services.json
-          os.makedirs("customer_app/android/app", exist_ok=True)
-          with open("customer_app/android/app/google-services.json", "w", encoding="utf-8") as f:
-              f.write("""{
+          mkdir -p customer_app/android/app
+          cat << 'EOF' > customer_app/android/app/google-services.json
+          {
             "project_info": {
               "project_number": "123456789000",
               "project_id": "meesho-customer-store",
@@ -86,12 +99,12 @@ jobs:
               }
             ],
             "configuration_version": "1"
-          }""")
+          }
+          EOF
 
           # Customer main.dart (Full Meesho UI)
-          os.makedirs("customer_app/lib", exist_ok=True)
-          with open("customer_app/lib/main.dart", "w", encoding="utf-8") as f:
-              f.write("""import 'dart:io';
+          cat << 'EOF' > customer_app/lib/main.dart
+          import 'dart:io';
           import 'package:flutter/material.dart';
           import 'package:image_picker/image_picker.dart';
 
@@ -105,7 +118,7 @@ jobs:
             @override
             Widget build(BuildContext context) {
               return MaterialApp(
-                title: 'T-Shirt Store',
+                title: 'Meesho T-Shirt Store',
                 debugShowCheckedModeBanner: false,
                 theme: ThemeData(
                   primaryColor: const Color(0xFF9F2089),
@@ -366,7 +379,6 @@ jobs:
             final _phone = TextEditingController();
             final _address = TextEditingController();
             final _utr = TextEditingController();
-            File? _proof;
 
             @override
             Widget build(BuildContext context) {
@@ -406,15 +418,22 @@ jobs:
               );
             }
           }
-          """)
+          EOF
 
-          # 2. Admin App Generation (With Telegram Poller)
-          if not os.path.exists("admin_app/android"):
-              subprocess.run(["flutter", "create", "--org", "com.meesho.admin", "--project-name", "admin_app", "--platforms", "android", "admin_app"], check=True)
+          # 2. SETUP ADMIN APP (Purana v1 Android delete karke fresh v2 create karein)
+          if [ ! -d "admin_app/lib" ]; then
+            rm -rf admin_app
+            flutter create --org com.meesho.admin --project-name admin_app --platforms=android admin_app
+          else
+            cd admin_app
+            rm -rf android
+            flutter create --org com.meesho.admin --project-name admin_app --platforms=android .
+            cd ..
+          fi
 
           # Admin pubspec.yaml
-          with open("admin_app/pubspec.yaml", "w", encoding="utf-8") as f:
-              f.write("""name: admin_app
+          cat << 'EOF' > admin_app/pubspec.yaml
+          name: admin_app
           description: "Store Admin & Telegram Poller"
           publish_to: 'none'
           version: 1.0.0+1
@@ -434,12 +453,12 @@ jobs:
 
           flutter:
             uses-material-design: true
-          """)
+          EOF
 
           # Admin google-services.json
-          os.makedirs("admin_app/android/app", exist_ok=True)
-          with open("admin_app/android/app/google-services.json", "w", encoding="utf-8") as f:
-              f.write("""{
+          mkdir -p admin_app/android/app
+          cat << 'EOF' > admin_app/android/app/google-services.json
+          {
             "project_info": {
               "project_number": "123456789000",
               "project_id": "meesho-admin-store",
@@ -455,12 +474,12 @@ jobs:
               }
             ],
             "configuration_version": "1"
-          }""")
+          }
+          EOF
 
           # Admin main.dart (Telegram Live Poller)
-          os.makedirs("admin_app/lib", exist_ok=True)
-          with open("admin_app/lib/main.dart", "w", encoding="utf-8") as f:
-              f.write("""import 'dart:async';
+          cat << 'EOF' > admin_app/lib/main.dart
+          import 'dart:async';
           import 'dart:convert';
           import 'package:flutter/material.dart';
           import 'package:http/http.dart' as http;
@@ -604,21 +623,19 @@ jobs:
               );
             }
           }
-          """)
-          print("SUCCESS: Code generated perfectly!")
           EOF
 
-      - name: Commit and Push Code to Repository
-        run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          # 3. Commit and Push clean code back to repository
           git add customer_app admin_app
           if ! git diff --cached --quiet; then
-            git commit -m "feat: setup meesho customer and admin projects [skip ci]"
+            git commit -m "fix: clean android v2 embedding for both apps [skip ci]"
             git push origin HEAD:${{ github.ref_name }}
           fi
 
-      - name: Build Single DEX Customer APK
+      # -------------------------------------------------------------
+      # STEP 2: Build Single DEX Customer APK
+      # -------------------------------------------------------------
+      - name: Build Customer APK
         run: |
           cd customer_app
           flutter pub get
@@ -626,7 +643,10 @@ jobs:
           APK=$(find build/app/outputs/flutter-apk -name "*release*.apk" | head -n 1)
           echo "CUST_APK=$(pwd)/$APK" >> $GITHUB_ENV
 
-      - name: Build Single DEX Admin APK
+      # -------------------------------------------------------------
+      # STEP 3: Build Single DEX Admin APK
+      # -------------------------------------------------------------
+      - name: Build Admin APK
         run: |
           cd admin_app
           flutter pub get
@@ -634,6 +654,9 @@ jobs:
           APK=$(find build/app/outputs/flutter-apk -name "*release*.apk" | head -n 1)
           echo "ADM_APK=$(pwd)/$APK" >> $GITHUB_ENV
 
+      # -------------------------------------------------------------
+      # STEP 4: Send Both APKs to Telegram
+      # -------------------------------------------------------------
       - name: Send APKs to Telegram
         env:
           BOT_TOKEN: "7663258345:AAFWanmBg6FD_DQTz2q9tkvHX-8M9vAWkUA"
@@ -646,12 +669,14 @@ jobs:
 
           if [ -n "$TARGET" ] && [ "$TARGET" != "null" ]; then
             curl -F "chat_id=${TARGET}" \
-                 -F "caption=🛍️ Meesho Customer App APK (Single DEX)" \
+                 -F "caption=🛍️ *Meesho Style Customer App APK (Single DEX)* ✅" \
+                 -F "parse_mode=Markdown" \
                  -F "document=@${CUST_APK}" \
                  "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument"
 
             curl -F "chat_id=${TARGET}" \
-                 -F "caption=👑 Store Admin App APK (Single DEX)" \
+                 -F "caption=👑 *Store Admin App APK (Single DEX + Telegram Polling)* ✅" \
+                 -F "parse_mode=Markdown" \
                  -F "document=@${ADM_APK}" \
                  "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument"
           fi
