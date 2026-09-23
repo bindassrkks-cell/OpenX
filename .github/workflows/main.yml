@@ -1,4 +1,4 @@
-name: Meesho Store Build Pipeline
+name: Build Meesho Customer and Admin Apps
 
 on:
   push:
@@ -12,629 +12,529 @@ permissions:
 
 jobs:
   build-and-deliver:
-    name: Clean v2 Setup, Push & Build Optimized APKs
+    name: Setup Projects, Push Code & Build APKs
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Code
+      - name: Checkout Repository
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
           fetch-depth: 0
 
-      - name: Setup Java JDK (v17)
+      - name: Setup Java JDK
         uses: actions/setup-java@v4
         with:
-          distribution: temurin
-          java-version: 17
+          distribution: 'temurin'
+          java-version: '17'
 
-      - name: Setup Flutter Engine (3.24.5)
+      - name: Setup Flutter Engine
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: 3.24.5
-          channel: stable
+          flutter-version: '3.24.5'
+          channel: 'stable'
           cache: true
 
-      # -------------------------------------------------------------
-      # STEP 1: Fix Android v1 Embedding & Setup Projects
-      # -------------------------------------------------------------
-      - name: Setup Customer & Admin Projects (Android v2)
+      # STEP 1: Fresh Android v2 Project Structure
+      - name: Initialize Fresh Android v2 Projects
         run: |
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          rm -rf customer_app admin_app
+          flutter create --org com.meesho.tshirt --project-name customer_app --platforms=android customer_app
+          flutter create --org com.meesho.admin --project-name admin_app --platforms=android admin_app
+          cd customer_app && flutter pub add http image_picker && cd ..
+          cd admin_app && flutter pub add http && cd ..
 
-          # 1. SETUP CUSTOMER APP
-          if [ ! -d "customer_app/lib" ]; then
-            rm -rf customer_app
-            flutter create --org com.meesho.tshirt --project-name customer_app --platforms=android customer_app
-          else
-            # Ensure modern android v2 embedding
-            cd customer_app
-            rm -rf android
-            flutter create --org com.meesho.tshirt --project-name customer_app --platforms=android .
-            cd ..
-          fi
+      # STEP 2: Inject Google Services JSON Placeholder
+      - name: Inject Google Services JSON
+        run: |
+          mkdir -p customer_app/android/app admin_app/android/app
+          JSON_CONTENT='{"project_info":{"project_number":"123456789000","project_id":"meesho-store","storage_bucket":"meesho-store.appspot.com"},"client":[{"client_info":{"mobilesdk_app_id":"1:123456789000:android:app","android_client_info":{"package_name":"com.meesho.tshirt"}},"api_key":[{"current_key":"AIzaSyDummyKeyReplaceWithActualFirebaseKey"}]}],"configuration_version":"1"}'
+          echo "$JSON_CONTENT" > customer_app/android/app/google-services.json
+          echo "$JSON_CONTENT" > admin_app/android/app/google-services.json
 
-          # Customer pubspec.yaml
-          cat << 'EOF' > customer_app/pubspec.yaml
-          name: customer_app
-          description: "Meesho Style Custom T-Shirt Store"
-          publish_to: 'none'
-          version: 1.0.0+1
+      # STEP 3: Write Customer App (Meesho Pink Theme UI)
+      - name: Write Customer App Main Code
+        env:
+          CUSTOMER_DART: |
+            import 'dart:io';
+            import 'package:flutter/material.dart';
+            import 'package:image_picker/image_picker.dart';
 
-          environment:
-            sdk: '>=3.2.0 <4.0.0'
-
-          dependencies:
-            flutter:
-              sdk: flutter
-            image_picker: ^1.1.2
-            http: ^1.2.1
-
-          dev_dependencies:
-            flutter_test:
-              sdk: flutter
-            flutter_lints: ^3.0.0
-
-          flutter:
-            uses-material-design: true
-          EOF
-
-          # Customer google-services.json
-          mkdir -p customer_app/android/app
-          cat << 'EOF' > customer_app/android/app/google-services.json
-          {
-            "project_info": {
-              "project_number": "123456789000",
-              "project_id": "meesho-customer-store",
-              "storage_bucket": "meesho-customer-store.appspot.com"
-            },
-            "client": [
-              {
-                "client_info": {
-                  "mobilesdk_app_id": "1:123456789000:android:customerapp",
-                  "android_client_info": { "package_name": "com.meesho.tshirt.customer_app" }
-                },
-                "api_key": [{ "current_key": "AIzaSyDummyKeyReplaceWithActualFirebaseKey" }]
-              }
-            ],
-            "configuration_version": "1"
-          }
-          EOF
-
-          # Customer main.dart (Full Meesho UI)
-          cat << 'EOF' > customer_app/lib/main.dart
-          import 'dart:io';
-          import 'package:flutter/material.dart';
-          import 'package:image_picker/image_picker.dart';
-
-          void main() {
-            runApp(const MeeshoCustomerApp());
-          }
-
-          class MeeshoCustomerApp extends StatelessWidget {
-            const MeeshoCustomerApp({super.key});
-
-            @override
-            Widget build(BuildContext context) {
-              return MaterialApp(
-                title: 'Meesho T-Shirt Store',
-                debugShowCheckedModeBanner: false,
-                theme: ThemeData(
-                  primaryColor: const Color(0xFF9F2089),
-                  scaffoldBackgroundColor: const Color(0xFFF7F7F7),
-                  colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF9F2089)),
-                  useMaterial3: true,
-                ),
-                home: const HomeScreen(),
-              );
+            void main() {
+              runApp(const MeeshoCustomerApp());
             }
-          }
 
-          class HomeScreen extends StatefulWidget {
-            const HomeScreen({super.key});
-            @override
-            State<HomeScreen> createState() => _HomeScreenState();
-          }
+            class MeeshoCustomerApp extends StatelessWidget {
+              const MeeshoCustomerApp({super.key});
 
-          class _HomeScreenState extends State<HomeScreen> {
-            int _navIndex = 0;
-
-            final List<Map<String, dynamic>> products = const [
-              {
-                "id": "TSH01",
-                "title": "Tokyo Anime Oversized Streetwear Graphic Tee",
-                "price": 499,
-                "original_price": 999,
-                "discount": "50% OFF",
-                "rating": "4.3 ★",
-                "image": "https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=500"
-              },
-              {
-                "id": "TSH02",
-                "title": "Vintage Acid Wash 240 GSM Pure Cotton Tee",
-                "price": 399,
-                "original_price": 899,
-                "discount": "55% OFF",
-                "rating": "4.5 ★",
-                "image": "https://images.unsplash.com/photo-1583743814966-8936f5b7be1a?w=500"
-              },
-              {
-                "id": "TSH03",
-                "title": "Minimalist Japanese Aesthetic Black Tee",
-                "price": 449,
-                "original_price": 899,
-                "discount": "50% OFF",
-                "rating": "4.2 ★",
-                "image": "https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?w=500"
-              },
-              {
-                "id": "TSH04",
-                "title": "Drop Shoulder Retro Street Typography Tee",
-                "price": 549,
-                "original_price": 1099,
-                "discount": "50% OFF",
-                "rating": "4.4 ★",
-                "image": "https://images.unsplash.com/photo-1562157873-818bc0726f68?w=500"
-              }
-            ];
-
-            @override
-            Widget build(BuildContext context) {
-              return Scaffold(
-                appBar: AppBar(
-                  backgroundColor: Colors.white,
-                  elevation: 0.5,
-                  title: Container(
-                    height: 40,
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade100,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.grey.shade300),
-                    ),
-                    child: const Row(
-                      children: [
-                        Icon(Icons.search, color: Colors.grey, size: 20),
-                        SizedBox(width: 8),
-                        Text("Search T-Shirts, Anime, Sizes...", style: TextStyle(color: Colors.grey, fontSize: 13)),
-                      ],
-                    ),
+              @override
+              Widget build(BuildContext context) {
+                return MaterialApp(
+                  title: 'Meesho T-Shirt Store',
+                  debugShowCheckedModeBanner: false,
+                  theme: ThemeData(
+                    primaryColor: const Color(0xFF9F2089),
+                    scaffoldBackgroundColor: const Color(0xFFF7F7F7),
+                    colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF9F2089)),
+                    useMaterial3: true,
                   ),
-                ),
-                body: ListView(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-                      color: const Color(0xFFFBE7F5),
+                  home: const HomeScreen(),
+                );
+              }
+            }
+
+            class HomeScreen extends StatefulWidget {
+              const HomeScreen({super.key});
+              @override
+              State<HomeScreen> createState() => _HomeScreenState();
+            }
+
+            class _HomeScreenState extends State<HomeScreen> {
+              int _navIndex = 0;
+
+              final List<Map<String, dynamic>> products = const [
+                {
+                  "id": "TSH01",
+                  "title": "Tokyo Anime Oversized Streetwear Graphic Tee",
+                  "price": 499,
+                  "original_price": 999,
+                  "discount": "50% OFF",
+                  "rating": "4.3 ★",
+                  "image": "https://images.unsplash.com/photo-1521572267360-ee0c2909d518?w=500"
+                },
+                {
+                  "id": "TSH02",
+                  "title": "Vintage Acid Wash 240 GSM Pure Cotton Tee",
+                  "price": 399,
+                  "original_price": 899,
+                  "discount": "55% OFF",
+                  "rating": "4.5 ★",
+                  "image": "https://images.unsplash.com/photo-1583743814966-8936f5b7be1a?w=500"
+                },
+                {
+                  "id": "TSH03",
+                  "title": "Minimalist Japanese Aesthetic Black Tee",
+                  "price": 449,
+                  "original_price": 899,
+                  "discount": "50% OFF",
+                  "rating": "4.2 ★",
+                  "image": "https://images.unsplash.com/photo-1503342217505-b0a15ec3261c?w=500"
+                },
+                {
+                  "id": "TSH04",
+                  "title": "Drop Shoulder Retro Street Typography Tee",
+                  "price": 549,
+                  "original_price": 1099,
+                  "discount": "50% OFF",
+                  "rating": "4.4 ★",
+                  "image": "https://images.unsplash.com/photo-1562157873-818bc0726f68?w=500"
+                }
+              ];
+
+              @override
+              Widget build(BuildContext context) {
+                return Scaffold(
+                  appBar: AppBar(
+                    backgroundColor: Colors.white,
+                    elevation: 0.5,
+                    title: Container(
+                      height: 40,
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.grey.shade300),
+                      ),
                       child: const Row(
                         children: [
-                          Icon(Icons.local_shipping_outlined, color: Color(0xFF9F2089), size: 18),
+                          Icon(Icons.search, color: Colors.grey, size: 20),
                           SizedBox(width: 8),
-                          Text("Free Delivery + Cash On Delivery Available", style: TextStyle(color: Color(0xFF9F2089), fontWeight: FontWeight.bold, fontSize: 12)),
+                          Text("Search T-Shirts, Anime, Sizes...", style: TextStyle(color: Colors.grey, fontSize: 13)),
                         ],
                       ),
                     ),
-                    GridView.builder(
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      padding: const EdgeInsets.all(8),
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
-                        childAspectRatio: 0.60,
-                        crossAxisSpacing: 8,
-                        mainAxisSpacing: 8,
-                      ),
-                      itemCount: products.length,
-                      itemBuilder: (ctx, i) {
-                        final p = products[i];
-                        return GestureDetector(
-                          onTap: () => Navigator.push(ctx, MaterialPageRoute(builder: (_) => ProductDetailScreen(product: p))),
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.grey.shade200),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Expanded(
-                                  child: ClipRRect(
-                                    borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
-                                    child: Image.network(p['image'], width: double.infinity, fit: BoxFit.cover),
-                                  ),
-                                ),
-                                Padding(
-                                  padding: const EdgeInsets.all(8.0),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(p['title'], maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12)),
-                                      const SizedBox(height: 4),
-                                      Row(
-                                        children: [
-                                          Text("₹${p['price']}", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                                          const SizedBox(width: 4),
-                                          Text("₹${p['original_price']}", style: const TextStyle(fontSize: 11, decoration: TextDecoration.lineThrough, color: Colors.grey)),
-                                          const SizedBox(width: 4),
-                                          Text(p['discount'], style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.green)),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                        decoration: BoxDecoration(color: Colors.green.shade700, borderRadius: BorderRadius.circular(10)),
-                                        child: Text(p['rating'], style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-                                      ),
-                                      const SizedBox(height: 2),
-                                      const Text("Free Delivery", style: TextStyle(fontSize: 10, color: Colors.grey)),
-                                    ],
-                                  ),
-                                )
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    )
-                  ],
-                ),
-                bottomNavigationBar: BottomNavigationBar(
-                  currentIndex: _navIndex,
-                  onTap: (i) => setState(() => _navIndex = i),
-                  type: BottomNavigationBarType.fixed,
-                  selectedItemColor: const Color(0xFF9F2089),
-                  items: const [
-                    BottomNavigationBarItem(icon: Icon(Icons.home), label: "Home"),
-                    BottomNavigationBarItem(icon: Icon(Icons.grid_view), label: "Categories"),
-                    BottomNavigationBarItem(icon: Icon(Icons.shopping_bag_outlined), label: "Orders"),
-                    BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: "Account"),
-                  ],
-                ),
-              );
-            }
-          }
-
-          class ProductDetailScreen extends StatefulWidget {
-            final Map<String, dynamic> product;
-            const ProductDetailScreen({super.key, required this.product});
-
-            @override
-            State<ProductDetailScreen> createState() => _ProductDetailScreenState();
-          }
-
-          class _ProductDetailScreenState extends State<ProductDetailScreen> {
-            String selectedSize = "M";
-
-            @override
-            Widget build(BuildContext context) {
-              final p = widget.product;
-              return Scaffold(
-                appBar: AppBar(title: Text(p['title'], style: const TextStyle(fontSize: 15))),
-                body: ListView(
-                  children: [
-                    Image.network(p['image'], height: 350, width: double.infinity, fit: BoxFit.cover),
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(p['title'], style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 6),
-                          Text("₹${p['price']}", style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black)),
-                          const Divider(height: 30),
-                          const Text("Select Size", style: TextStyle(fontWeight: FontWeight.bold)),
-                          const SizedBox(height: 10),
-                          Row(
-                            children: ["S", "M", "L", "XL", "XXL"].map((s) {
-                              final isSel = selectedSize == s;
-                              return GestureDetector(
-                                onTap: () => setState(() => selectedSize = s),
-                                child: Container(
-                                  margin: const EdgeInsets.only(right: 10),
-                                  width: 44,
-                                  height: 44,
-                                  decoration: BoxDecoration(
-                                    color: isSel ? const Color(0xFF9F2089) : Colors.white,
-                                    shape: BoxShape.circle,
-                                    border: Border.all(color: isSel ? const Color(0xFF9F2089) : Colors.grey.shade400),
-                                  ),
-                                  child: Center(child: Text(s, style: TextStyle(color: isSel ? Colors.white : Colors.black, fontWeight: FontWeight.bold))),
-                                ),
-                              );
-                            }).toList(),
-                          )
-                        ],
-                      ),
-                    )
-                  ],
-                ),
-                bottomNavigationBar: Container(
-                  padding: const EdgeInsets.all(12),
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF9F2089),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => CheckoutScreen(product: p, size: selectedSize))),
-                    child: const Text("BUY NOW", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
                   ),
-                ),
-              );
-            }
-          }
-
-          class CheckoutScreen extends StatefulWidget {
-            final Map<String, dynamic> product;
-            final String size;
-            const CheckoutScreen({super.key, required this.product, required this.size});
-
-            @override
-            State<CheckoutScreen> createState() => _CheckoutScreenState();
-          }
-
-          class _CheckoutScreenState extends State<CheckoutScreen> {
-            final _name = TextEditingController();
-            final _phone = TextEditingController();
-            final _address = TextEditingController();
-            final _utr = TextEditingController();
-
-            @override
-            Widget build(BuildContext context) {
-              return Scaffold(
-                appBar: AppBar(title: const Text("Checkout")),
-                body: ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    Text("Total: ₹${widget.product['price']} (Size: ${widget.size})", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 12),
-                    TextField(controller: _name, decoration: const InputDecoration(labelText: "Full Name", border: OutlineInputBorder())),
-                    const SizedBox(height: 10),
-                    TextField(controller: _phone, decoration: const InputDecoration(labelText: "Phone", border: OutlineInputBorder()), keyboardType: TextInputType.phone),
-                    const SizedBox(height: 10),
-                    TextField(controller: _address, decoration: const InputDecoration(labelText: "Delivery Address", border: OutlineInputBorder())),
-                    const Divider(height: 30),
-                    Center(child: Image.network("https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=upi://pay?pa=store@upi%26pn=Store%26am=${widget.product['price']}&cu=INR")),
-                    const SizedBox(height: 10),
-                    TextField(controller: _utr, decoration: const InputDecoration(labelText: "12-Digit UTR Number", border: OutlineInputBorder())),
-                    const SizedBox(height: 15),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF9F2089), padding: const EdgeInsets.symmetric(vertical: 14)),
-                      onPressed: () {
-                        showDialog(
-                          context: context,
-                          builder: (_) => AlertDialog(
-                            title: const Text("Order Placed! 🎉"),
-                            content: const Text("Aapka order successfully place ho gaya hai!"),
-                            actions: [TextButton(onPressed: () => Navigator.popUntil(context, (r) => r.isFirst), child: const Text("OK"))],
-                          ),
-                        );
-                      },
-                      child: const Text("CONFIRM ORDER", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                    )
-                  ],
-                ),
-              );
-            }
-          }
-          EOF
-
-          # 2. SETUP ADMIN APP (Purana v1 Android delete karke fresh v2 create karein)
-          if [ ! -d "admin_app/lib" ]; then
-            rm -rf admin_app
-            flutter create --org com.meesho.admin --project-name admin_app --platforms=android admin_app
-          else
-            cd admin_app
-            rm -rf android
-            flutter create --org com.meesho.admin --project-name admin_app --platforms=android .
-            cd ..
-          fi
-
-          # Admin pubspec.yaml
-          cat << 'EOF' > admin_app/pubspec.yaml
-          name: admin_app
-          description: "Store Admin & Telegram Poller"
-          publish_to: 'none'
-          version: 1.0.0+1
-
-          environment:
-            sdk: '>=3.2.0 <4.0.0'
-
-          dependencies:
-            flutter:
-              sdk: flutter
-            http: ^1.2.1
-
-          dev_dependencies:
-            flutter_test:
-              sdk: flutter
-            flutter_lints: ^3.0.0
-
-          flutter:
-            uses-material-design: true
-          EOF
-
-          # Admin google-services.json
-          mkdir -p admin_app/android/app
-          cat << 'EOF' > admin_app/android/app/google-services.json
-          {
-            "project_info": {
-              "project_number": "123456789000",
-              "project_id": "meesho-admin-store",
-              "storage_bucket": "meesho-admin-store.appspot.com"
-            },
-            "client": [
-              {
-                "client_info": {
-                  "mobilesdk_app_id": "1:123456789000:android:adminapp",
-                  "android_client_info": { "package_name": "com.meesho.admin.admin_app" }
-                },
-                "api_key": [{ "current_key": "AIzaSyDummyKeyReplaceWithActualFirebaseKey" }]
+                  body: ListView(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                        color: const Color(0xFFFBE7F5),
+                        child: const Row(
+                          children: [
+                            Icon(Icons.local_shipping_outlined, color: Color(0xFF9F2089), size: 18),
+                            SizedBox(width: 8),
+                            Text("Free Delivery + Cash On Delivery Available", style: TextStyle(color: Color(0xFF9F2089), fontWeight: FontWeight.bold, fontSize: 12)),
+                          ],
+                        ),
+                      ),
+                      GridView.builder(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        padding: const EdgeInsets.all(8),
+                        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          childAspectRatio: 0.60,
+                          crossAxisSpacing: 8,
+                          mainAxisSpacing: 8,
+                        ),
+                        itemCount: products.length,
+                        itemBuilder: (ctx, i) {
+                          final p = products[i];
+                          return GestureDetector(
+                            onTap: () => Navigator.push(ctx, MaterialPageRoute(builder: (_) => ProductDetailScreen(product: p))),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: Colors.grey.shade200),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(
+                                    child: ClipRRect(
+                                      borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+                                      child: Image.network(p['image'], width: double.infinity, fit: BoxFit.cover),
+                                    ),
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.all(8.0),
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(p['title'], maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12)),
+                                        const SizedBox(height: 4),
+                                        Row(
+                                          children: [
+                                            Text("₹${p['price']}", style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                                            const SizedBox(width: 4),
+                                            Text("₹${p['original_price']}", style: const TextStyle(fontSize: 11, decoration: TextDecoration.lineThrough, color: Colors.grey)),
+                                            const SizedBox(width: 4),
+                                            Text(p['discount'], style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.green)),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                          decoration: BoxDecoration(color: Colors.green.shade700, borderRadius: BorderRadius.circular(10)),
+                                          child: Text(p['rating'], style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                                        ),
+                                        const SizedBox(height: 2),
+                                        const Text("Free Delivery", style: TextStyle(fontSize: 10, color: Colors.grey)),
+                                      ],
+                                    ),
+                                  )
+                                ],
+                              ),
+                            ),
+                          );
+                        },
+                      )
+                    ],
+                  ),
+                  bottomNavigationBar: BottomNavigationBar(
+                    currentIndex: _navIndex,
+                    onTap: (i) => setState(() => _navIndex = i),
+                    type: BottomNavigationBarType.fixed,
+                    selectedItemColor: const Color(0xFF9F2089),
+                    items: const [
+                      BottomNavigationBarItem(icon: Icon(Icons.home), label: "Home"),
+                      BottomNavigationBarItem(icon: Icon(Icons.grid_view), label: "Categories"),
+                      BottomNavigationBarItem(icon: Icon(Icons.shopping_bag_outlined), label: "Orders"),
+                      BottomNavigationBarItem(icon: Icon(Icons.person_outline), label: "Account"),
+                    ],
+                  ),
+                );
               }
-            ],
-            "configuration_version": "1"
-          }
-          EOF
-
-          # Admin main.dart (Telegram Live Poller)
-          cat << 'EOF' > admin_app/lib/main.dart
-          import 'dart:async';
-          import 'dart:convert';
-          import 'package:flutter/material.dart';
-          import 'package:http/http.dart' as http;
-
-          void main() {
-            runApp(const AdminApp());
-          }
-
-          class AdminApp extends StatelessWidget {
-            const AdminApp({super.key});
-
-            @override
-            Widget build(BuildContext context) {
-              return MaterialApp(
-                title: 'Admin Control Center',
-                debugShowCheckedModeBanner: false,
-                theme: ThemeData(
-                  primaryColor: Colors.black,
-                  scaffoldBackgroundColor: const Color(0xFFF4F6F9),
-                  useMaterial3: true,
-                ),
-                home: const AdminHome(),
-              );
-            }
-          }
-
-          class AdminHome extends StatefulWidget {
-            const AdminHome({super.key});
-
-            @override
-            State<AdminHome> createState() => _AdminHomeState();
-          }
-
-          class _AdminHomeState extends State<AdminHome> {
-            final String botToken = "7663258345:AAFWanmBg6FD_DQTz2q9tkvHX-8M9vAWkUA";
-            Timer? timer;
-            int lastUpdateId = 0;
-            List<String> logs = [];
-
-            @override
-            void initState() {
-              super.initState();
-              startPolling();
             }
 
-            @override
-            void dispose() {
-              timer?.cancel();
-              super.dispose();
+            class ProductDetailScreen extends StatefulWidget {
+              final Map<String, dynamic> product;
+              const ProductDetailScreen({super.key, required this.product});
+
+              @override
+              State<ProductDetailScreen> createState() => _ProductDetailScreenState();
             }
 
-            void startPolling() {
-              timer = Timer.periodic(const Duration(seconds: 4), (t) async {
-                try {
-                  final url = Uri.parse("https://api.telegram.org/bot$botToken/getUpdates?offset=${lastUpdateId + 1}&timeout=2");
-                  final res = await http.get(url);
-                  if (res.statusCode == 200) {
-                    final data = jsonDecode(res.body);
-                    final updates = data['result'] as List;
-                    for (var u in updates) {
-                      lastUpdateId = u['update_id'];
-                      if (u.containsKey('message')) {
-                        final chatId = u['message']['chat']['id'];
-                        final text = u['message']['text'] ?? "";
-                        _respond(chatId, text);
-                      }
-                    }
-                  }
-                } catch (_) {}
-              });
-            }
+            class _ProductDetailScreenState extends State<ProductDetailScreen> {
+              String selectedSize = "M";
 
-            void _respond(dynamic chatId, String text) async {
-              String reply = "Store Admin is Active. Type /orders to see list.";
-              if (text == "/orders") reply = "Orders: #ORD_101 (Rs. 499) - Tokyo Anime Tee";
-              final url = Uri.parse("https://api.telegram.org/bot$botToken/sendMessage");
-              await http.post(url, body: {"chat_id": chatId.toString(), "text": reply});
-              setState(() => logs.insert(0, "Chat: $chatId sent '$text'"));
-            }
-
-            @override
-            Widget build(BuildContext context) {
-              return Scaffold(
-                appBar: AppBar(
-                  title: const Text("Admin & Telegram Poller", style: TextStyle(color: Colors.white, fontSize: 16)),
-                  backgroundColor: Colors.black,
-                  actions: [
-                    Container(
-                      margin: const EdgeInsets.only(right: 12),
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(color: Colors.green, borderRadius: BorderRadius.circular(12)),
-                      child: const Text("Polling Active", style: TextStyle(color: Colors.white, fontSize: 11)),
-                    )
-                  ],
-                ),
-                body: ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    Card(
-                      color: Colors.white,
-                      child: Padding(
+              @override
+              Widget build(BuildContext context) {
+                final p = widget.product;
+                return Scaffold(
+                  appBar: AppBar(title: Text(p['title'], style: const TextStyle(fontSize: 15))),
+                  body: ListView(
+                    children: [
+                      Image.network(p['image'], height: 350, width: double.infinity, fit: BoxFit.cover),
+                      Padding(
                         padding: const EdgeInsets.all(16),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text("Order #ORD_101", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                            const Text("Item: Tokyo Anime Tee (L) - Rs. 499"),
-                            const Text("UTR: 498129038102", style: TextStyle(color: Colors.blueGrey, fontWeight: FontWeight.bold)),
-                            const SizedBox(height: 12),
+                            Text(p['title'], style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 6),
+                            Text("₹${p['price']}", style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black)),
+                            const Divider(height: 30),
+                            const Text("Select Size", style: TextStyle(fontWeight: FontWeight.bold)),
+                            const SizedBox(height: 10),
                             Row(
-                              children: [
-                                ElevatedButton(
-                                  style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
-                                  onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Order Approved!"))),
-                                  child: const Text("Approve"),
-                                ),
-                                const SizedBox(width: 8),
-                                OutlinedButton(
-                                  onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Shiprocket Courier Dispatched!"))),
-                                  child: const Text("Dispatch"),
-                                ),
-                              ],
+                              children: ["S", "M", "L", "XL", "XXL"].map((s) {
+                                final isSel = selectedSize == s;
+                                return GestureDetector(
+                                  onTap: () => setState(() => selectedSize = s),
+                                  child: Container(
+                                    margin: const EdgeInsets.only(right: 10),
+                                    width: 44,
+                                    height: 44,
+                                    decoration: BoxDecoration(
+                                      color: isSel ? const Color(0xFF9F2089) : Colors.white,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(color: isSel ? const Color(0xFF9F2089) : Colors.grey.shade400),
+                                    ),
+                                    child: Center(child: Text(s, style: TextStyle(color: isSel ? Colors.white : Colors.black, fontWeight: FontWeight.bold))),
+                                  ),
+                                );
+                              }).toList(),
                             )
                           ],
                         ),
+                      )
+                    ],
+                  ),
+                  bottomNavigationBar: Container(
+                    padding: const EdgeInsets.all(12),
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF9F2089),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
+                      onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => CheckoutScreen(product: p, size: selectedSize))),
+                      child: const Text("BUY NOW", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
                     ),
-                    const SizedBox(height: 20),
-                    const Text("Telegram Bot Live Logs", style: TextStyle(fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 8),
-                    Container(
-                      height: 160,
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(8)),
-                      child: logs.isEmpty
-                          ? const Center(child: Text("Listening for Telegram commands...", style: TextStyle(color: Colors.white60, fontSize: 12)))
-                          : ListView.builder(itemCount: logs.length, itemBuilder: (c, i) => Text(logs[i], style: const TextStyle(color: Colors.greenAccent, fontSize: 12))),
-                    )
-                  ],
-                ),
-              );
+                  ),
+                );
+              }
             }
-          }
-          EOF
 
-          # 3. Commit and Push clean code back to repository
+            class CheckoutScreen extends StatefulWidget {
+              final Map<String, dynamic> product;
+              final String size;
+              const CheckoutScreen({super.key, required this.product, required this.size});
+
+              @override
+              State<CheckoutScreen> createState() => _CheckoutScreenState();
+            }
+
+            class _CheckoutScreenState extends State<CheckoutScreen> {
+              final _name = TextEditingController();
+              final _phone = TextEditingController();
+              final _address = TextEditingController();
+              final _utr = TextEditingController();
+
+              @override
+              Widget build(BuildContext context) {
+                return Scaffold(
+                  appBar: AppBar(title: const Text("Checkout")),
+                  body: ListView(
+                    padding: const EdgeInsets.all(16),
+                    children: [
+                      Text("Total: ₹${widget.product['price']} (Size: ${widget.size})", style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 12),
+                      TextField(controller: _name, decoration: const InputDecoration(labelText: "Full Name", border: OutlineInputBorder())),
+                      const SizedBox(height: 10),
+                      TextField(controller: _phone, decoration: const InputDecoration(labelText: "Phone", border: OutlineInputBorder()), keyboardType: TextInputType.phone),
+                      const SizedBox(height: 10),
+                      TextField(controller: _address, decoration: const InputDecoration(labelText: "Delivery Address", border: OutlineInputBorder())),
+                      const Divider(height: 30),
+                      Center(child: Image.network("https://api.qrserver.com/v1/create-qr-code/?size=160x160&data=upi://pay?pa=store@upi%26pn=Store%26am=${widget.product['price']}&cu=INR")),
+                      const SizedBox(height: 10),
+                      TextField(controller: _utr, decoration: const InputDecoration(labelText: "12-Digit UTR Number", border: OutlineInputBorder())),
+                      const SizedBox(height: 15),
+                      ElevatedButton(
+                        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF9F2089), padding: const EdgeInsets.symmetric(vertical: 14)),
+                        onPressed: () {
+                          showDialog(
+                            context: context,
+                            builder: (_) => AlertDialog(
+                              title: const Text("Order Placed! 🎉"),
+                              content: const Text("Aapka order successfully place ho gaya hai!"),
+                              actions: [TextButton(onPressed: () => Navigator.popUntil(context, (r) => r.isFirst), child: const Text("OK"))],
+                            ),
+                          );
+                        },
+                        child: const Text("CONFIRM ORDER", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                      )
+                    ],
+                  ),
+                );
+              }
+            }
+        run: |
+          node -e 'require("fs").writeFileSync("customer_app/lib/main.dart", process.env.CUSTOMER_DART)'
+
+      # STEP 4: Write Admin App (Telegram Poller UI)
+      - name: Write Admin App Main Code
+        env:
+          ADMIN_DART: |
+            import 'dart:async';
+            import 'dart:convert';
+            import 'package:flutter/material.dart';
+            import 'package:http/http.dart' as http;
+
+            void main() {
+              runApp(const AdminApp());
+            }
+
+            class AdminApp extends StatelessWidget {
+              const AdminApp({super.key});
+
+              @override
+              Widget build(BuildContext context) {
+                return MaterialApp(
+                  title: 'Admin Control Center',
+                  debugShowCheckedModeBanner: false,
+                  theme: ThemeData(
+                    primaryColor: Colors.black,
+                    scaffoldBackgroundColor: const Color(0xFFF4F6F9),
+                    useMaterial3: true,
+                  ),
+                  home: const AdminHome(),
+                );
+              }
+            }
+
+            class AdminHome extends StatefulWidget {
+              const AdminHome({super.key});
+
+              @override
+              State<AdminHome> createState() => _AdminHomeState();
+            }
+
+            class _AdminHomeState extends State<AdminHome> {
+              final String botToken = "7663258345:AAFWanmBg6FD_DQTz2q9tkvHX-8M9vAWkUA";
+              Timer? timer;
+              int lastUpdateId = 0;
+              List<String> logs = [];
+
+              @override
+              void initState() {
+                super.initState();
+                startPolling();
+              }
+
+              @override
+              void dispose() {
+                timer?.cancel();
+                super.dispose();
+              }
+
+              void startPolling() {
+                timer = Timer.periodic(const Duration(seconds: 4), (t) async {
+                  try {
+                    final url = Uri.parse("https://api.telegram.org/bot$botToken/getUpdates?offset=${lastUpdateId + 1}&timeout=2");
+                    final res = await http.get(url);
+                    if (res.statusCode == 200) {
+                      final data = jsonDecode(res.body);
+                      final updates = data['result'] as List;
+                      for (var u in updates) {
+                        lastUpdateId = u['update_id'];
+                        if (u.containsKey('message')) {
+                          final chatId = u['message']['chat']['id'];
+                          final text = u['message']['text'] ?? "";
+                          _respond(chatId, text);
+                        }
+                      }
+                    }
+                  } catch (_) {}
+                });
+              }
+
+              void _respond(dynamic chatId, String text) async {
+                String reply = "Store Admin is Active. Type /orders to see list.";
+                if (text == "/orders") reply = "Orders: #ORD_101 (Rs. 499) - Tokyo Anime Tee";
+                final url = Uri.parse("https://api.telegram.org/bot$botToken/sendMessage");
+                await http.post(url, body: {"chat_id": chatId.toString(), "text": reply});
+                setState(() => logs.insert(0, "Chat: $chatId sent '$text'"));
+              }
+
+              @override
+              Widget build(BuildContext context) {
+                return Scaffold(
+                  appBar: AppBar(
+                    title: const Text("Admin & Telegram Poller", style: TextStyle(color: Colors.white, fontSize: 16)),
+                    backgroundColor: Colors.black,
+                    actions: [
+                      Container(
+                        margin: const EdgeInsets.only(right: 12),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(color: Colors.green, borderRadius: BorderRadius.circular(12)),
+                        child: const Text("Polling Active", style: TextStyle(color: Colors.white, fontSize: 11)),
+                      )
+                    ],
+                  ),
+                  body: ListView(
+                    padding: const EdgeInsets.all(16),
+                    children: [
+                      Card(
+                        color: Colors.white,
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text("Order #ORD_101", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                              const Text("Item: Tokyo Anime Tee (L) - Rs. 499"),
+                              const Text("UTR: 498129038102", style: TextStyle(color: Colors.blueGrey, fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 12),
+                              Row(
+                                children: [
+                                  ElevatedButton(
+                                    style: ElevatedButton.styleFrom(backgroundColor: Colors.green, foregroundColor: Colors.white),
+                                    onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Order Approved!"))),
+                                    child: const Text("Approve"),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  OutlinedButton(
+                                    onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Shiprocket Courier Dispatched!"))),
+                                    child: const Text("Dispatch"),
+                                  ),
+                                ],
+                              )
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      const Text("Telegram Bot Live Logs", style: TextStyle(fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 8),
+                      Container(
+                        height: 160,
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(8)),
+                        child: logs.isEmpty
+                            ? const Center(child: Text("Listening for Telegram commands...", style: TextStyle(color: Colors.white60, fontSize: 12)))
+                            : ListView.builder(itemCount: logs.length, itemBuilder: (c, i) => Text(logs[i], style: const TextStyle(color: Colors.greenAccent, fontSize: 12))),
+                      )
+                    ],
+                  ),
+                );
+              }
+            }
+        run: |
+          node -e 'require("fs").writeFileSync("admin_app/lib/main.dart", process.env.ADMIN_DART)'
+
+      # STEP 5: Push Generated Projects to GitHub Repo
+      - name: Commit & Push Full Projects to Repository
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
           git add customer_app admin_app
           if ! git diff --cached --quiet; then
-            git commit -m "fix: clean android v2 embedding for both apps [skip ci]"
-            git push origin HEAD:${{ github.ref_name }}
+            git commit -m "feat: complete meesho customer & admin apps with v2 embedding [skip ci]"
+            git push origin HEAD:${GITHUB_REF_NAME}
           fi
 
-      # -------------------------------------------------------------
-      # STEP 2: Build Single DEX Customer APK
-      # -------------------------------------------------------------
+      # STEP 6: Build Single-DEX Customer App APK
       - name: Build Customer APK
         run: |
           cd customer_app
@@ -643,9 +543,7 @@ jobs:
           APK=$(find build/app/outputs/flutter-apk -name "*release*.apk" | head -n 1)
           echo "CUST_APK=$(pwd)/$APK" >> $GITHUB_ENV
 
-      # -------------------------------------------------------------
-      # STEP 3: Build Single DEX Admin APK
-      # -------------------------------------------------------------
+      # STEP 7: Build Single-DEX Admin App APK
       - name: Build Admin APK
         run: |
           cd admin_app
@@ -654,9 +552,7 @@ jobs:
           APK=$(find build/app/outputs/flutter-apk -name "*release*.apk" | head -n 1)
           echo "ADM_APK=$(pwd)/$APK" >> $GITHUB_ENV
 
-      # -------------------------------------------------------------
-      # STEP 4: Send Both APKs to Telegram
-      # -------------------------------------------------------------
+      # STEP 8: Dispatch Both APKs to Telegram
       - name: Send APKs to Telegram
         env:
           BOT_TOKEN: "7663258345:AAFWanmBg6FD_DQTz2q9tkvHX-8M9vAWkUA"
@@ -675,7 +571,7 @@ jobs:
                  "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument"
 
             curl -F "chat_id=${TARGET}" \
-                 -F "caption=👑 *Store Admin App APK (Single DEX + Telegram Polling)* ✅" \
+                 -F "caption=👑 *Store Admin App APK (Single DEX + Telegram Poller)* ✅" \
                  -F "parse_mode=Markdown" \
                  -F "document=@${ADM_APK}" \
                  "https://api.telegram.org/bot${BOT_TOKEN}/sendDocument"
